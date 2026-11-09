@@ -2,6 +2,8 @@
 
 **Work verified. Rewards released.** An autonomous micro-bounty command center built for the PayPal AI Hackathon.
 
+[Open the live judge demo](https://bountyguard.vercel.app/) — no login or credentials required for the simulated scenarios.
+
 Maintainers fund USD bounties with PayPal Sandbox Checkout. An auditor evaluates submitted evidence, challenges its own evaluation, and applies a server-enforced release policy. AG Grid presents the financial ledger, audit scores, criteria, and receipts.
 
 ## Run the judge demo
