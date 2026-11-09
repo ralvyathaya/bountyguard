@@ -1,0 +1,40 @@
+{
+  "name": "bountyguard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "typecheck": "prisma generate && tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@paypal/react-paypal-js": "8.9.2",
+    "@prisma/adapter-neon": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "ag-grid-community": "36.3.0",
+    "ag-grid-react": "36.3.0",
+    "lucide-react": "^0.468.0",
+    "next": "16.4.5",
+    "openai": "7.53.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "prisma": "7.10.1",
+    "tailwindcss": "^4.1.18",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.18.0 <23"
+  }
+}

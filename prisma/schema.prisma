@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Bounty {
+  id                  String        @id @default(cuid())
+  title               String
+  criteria            Json
+  rewardCents         Int
+  currency            String        @default("USD")
+  autoMinScore        Int           @default(90)
+  autoMaxCents        Int           @default(5000)
+  currentSubmissionId String?       @unique
+  currentSubmission   Submission?   @relation("CurrentSubmission", fields: [currentSubmissionId], references: [id], onDelete: SetNull)
+  auditClaim          String?
+  auditStartedAt      DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  submissions         Submission[]  @relation("Submissions")
+  funding             Funding?
+  payout              Payout?
+  events              LedgerEvent[]
+}
+
+model Submission {
+  id            String     @id @default(cuid())
+  bountyId      String
+  bounty        Bounty     @relation("Submissions", fields: [bountyId], references: [id], onDelete: Cascade)
+  currentFor    Bounty?    @relation("CurrentSubmission")
+  receiverEmail String
+  deliverable   String
+  createdAt     DateTime   @default(now())
+  audits        AuditRun[]
+  @@index([bountyId])
+}
+
+model AuditRun {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  status       String     @default("RUNNING")
+  verdict      Json?
+  steps        Json?
+  model        String
+  receiverEmail String
+  durationMs   Int?
+  error        String?
+  createdAt    DateTime   @default(now())
+  completedAt  DateTime?
+  @@index([submissionId, createdAt])
+}
+
+model Funding {
+  id            String   @id @default(cuid())
+  bountyId      String   @unique
+  bounty        Bounty   @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  requestId     String   @unique
+  captureKey    String   @unique
+  orderId       String?  @unique
+  captureId     String?  @unique
+  amountCents   Int
+  status        String   @default("CREATING")
+  receipt       Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Payout {
+  id             String   @id @default(cuid())
+  bountyId       String   @unique
+  bounty         Bounty   @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  submissionId   String
+  auditId        String
+  receiverEmail  String
+  amountCents    Int
+  senderBatchId  String   @unique
+  batchId        String?  @unique
+  transactionId  String?  @unique
+  status         String   @default("REQUESTED")
+  provider       String   @default("PAYPAL_SANDBOX")
+  settlementMode String
+  approvedAt     DateTime?
+  receipt        Json?
+  error          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model LedgerEvent {
+  id        String   @id @default(cuid())
+  bountyId  String
+  bounty    Bounty   @relation(fields: [bountyId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  @@index([bountyId, createdAt])
+}
+
+model LoginLimit {
+  key       String   @id
+  attempts  Int      @default(1)
+  expiresAt DateTime
+}

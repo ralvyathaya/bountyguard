@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+coverage/
+.env*
+!.env.example
+.vercel/
+*.log
+*.tsbuildinfo
+lib/generated/
+.hallmark/salt
+.hallmark/*.png
+.hallmark/*.jpg
+.hallmark/sloplint-report.json
+.hallmark/screenshots/
+test-results/
