@@ -6,6 +6,7 @@ import {
 } from "node:crypto";
 import { AppError, requiredEnv } from "./errors";
 import { db } from "./db";
+import type { SessionRole } from "./types";
 
 const COOKIE = "bountyguard_session";
 const TTL = 8 * 60 * 60;
@@ -28,40 +29,46 @@ function equal(a: string, b: string) {
     createHash("sha256").update(b).digest(),
   );
 }
-export function createSession(now = Date.now()) {
-  const payload = `${Math.floor(now / 1000) + TTL}.${randomBytes(16).toString("hex")}`;
+export function createSession(now = Date.now(), role: SessionRole = "maintainer") {
+  const payload = `v2.${Math.floor(now / 1000) + TTL}.${randomBytes(16).toString("hex")}.${role}`;
   return `${payload}.${sign(payload)}`;
 }
 export function validSession(token: string, now = Date.now()): boolean {
   const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  const [expires, nonce, signature] = parts;
+  if (parts.length !== 5) return false;
+  const [version, expires, nonce, role, signature] = parts;
   const expiry = Number(expires);
   if (
-    !Number.isInteger(expiry) ||
+    version !== "v2" || !["maintainer", "judge"].includes(role) || !Number.isInteger(expiry) ||
     expiry <= Math.floor(now / 1000) ||
     expiry > Math.floor(now / 1000) + TTL ||
     !/^[a-f0-9]{32}$/.test(nonce)
   )
     return false;
-  return equal(signature, sign(`${expires}.${nonce}`));
+  return equal(signature, sign(`${version}.${expires}.${nonce}.${role}`));
 }
-export function hasSession(request: Request) {
+export function getSession(request: Request): { role: SessionRole; sessionHash: string } | null {
   const token = request.headers
     .get("cookie")
     ?.split(";")
     .map((v) => v.trim())
     .find((v) => v.startsWith(`${COOKIE}=`))
     ?.slice(COOKIE.length + 1);
-  return !!token && validSession(token);
+  if (!token || !validSession(token)) return null;
+  return { role: token.split(".")[3] as SessionRole, sessionHash: createHash("sha256").update(token).digest("hex") };
+}
+export function hasSession(request: Request) {
+  return !!getSession(request);
+}
+export function requireViewer(request: Request) {
+  const session = getSession(request);
+  if (!session) throw new AppError(401, "Sign in with maintainer or judge access.", "UNAUTHORIZED");
+  return session;
 }
 export function requireMaintainer(request: Request) {
-  if (!hasSession(request))
-    throw new AppError(
-      401,
-      "Unlock Sandbox Connected with your maintainer password.",
-      "UNAUTHORIZED",
-    );
+  const session = requireViewer(request);
+  if (session.role !== "maintainer") throw new AppError(403, "Judge access cannot change financial records.", "FORBIDDEN");
+  return session;
 }
 export function checkOrigin(request: Request) {
   const origin = request.headers.get("origin");
@@ -89,18 +96,19 @@ export function checkOrigin(request: Request) {
 export function sessionCookie(token: string, clear = false) {
   return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${clear ? 0 : TTL}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
 }
-export async function login(password: string) {
-  const expected = requiredEnv("MAINTAINER_PASSWORD");
+export async function login(password: string, role: SessionRole = "maintainer") {
+  const setting = role === "judge" ? "JUDGE_PASSWORD" : "MAINTAINER_PASSWORD";
+  const expected = requiredEnv(setting);
   if (expected.length < 16)
     throw new AppError(
       503,
-      "MAINTAINER_PASSWORD must contain at least 16 characters.",
+      `${setting} must contain at least 16 characters.`,
       "SETUP_REQUIRED",
     );
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 15 * 60000);
   // A global bucket also bounds attempts from distributed IPs in serverless.
-  const key = `login:${Math.floor(now.getTime() / (15 * 60000))}`;
+  const key = `login:${role}:${Math.floor(now.getTime() / (15 * 60000))}`;
   const bucket = await db().loginLimit.upsert({
     where: { key },
     create: { key, expiresAt },
@@ -114,7 +122,7 @@ export async function login(password: string) {
     );
   if (!equal(password, expected))
     throw new AppError(401, "Incorrect maintainer password.", "UNAUTHORIZED");
-  const token = createSession();
+  const token = createSession(Date.now(), role);
   await db().loginLimit.deleteMany({ where: { expiresAt: { lt: now } } });
   return sessionCookie(token);
 }

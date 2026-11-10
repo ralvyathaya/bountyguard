@@ -14,6 +14,15 @@ export const criteriaSchema = z
     (items) => new Set(items.map((item) => item.id)).size === items.length,
     "Criterion IDs must be unique.",
   );
+export const evidencePolicySchema = z.object({
+  repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(200),
+  baseBranch: z.string().min(1).max(200).default("main"),
+  requiredChecks: z.array(z.object({
+    name: z.string().min(1).max(160),
+    appSlug: z.string().regex(/^[a-zA-Z0-9-]+$/).max(100),
+    workflowPath: z.string().regex(/^\.github\/workflows\/[a-zA-Z0-9_.-]+\.ya?ml$/).optional(),
+  }).strict()).min(1).max(10),
+}).strict();
 export const bountySchema = z
   .object({
     title: z.string().trim().min(3).max(160),
@@ -21,6 +30,7 @@ export const bountySchema = z
     reward: z.string().max(16),
     autoMinScore: z.number().int().min(0).max(100).default(90),
     autoMaxReward: z.string().max(16).default("50.00"),
+    evidencePolicy: evidencePolicySchema.optional(),
   })
   .strict();
 export const submissionSchema = z
@@ -35,6 +45,9 @@ export const submissionSchema = z
         "PayPal requires an ASCII email address.",
       ),
     deliverable: z.string().trim().min(20).max(80000),
+    sourceKind: z.enum(["TEXT", "GITHUB_PR"]).default("TEXT"),
+    sourceUrl: z.string().url().max(300).optional(),
+    contributorCountry: z.string().regex(/^[A-Z]{2}$/).optional(),
   })
   .strict();
 export const idSchema = z

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AppError } from "./errors";
-import { checkOrigin, requireMaintainer } from "./auth";
+import { checkOrigin, requireMaintainer, requireViewer } from "./auth";
 
 export async function readBody<T>(
   request: Request,
@@ -32,12 +32,13 @@ export async function readBody<T>(
 }
 export function api(
   handler: (request: Request) => Promise<Response | unknown>,
-  authenticated = true,
+  authenticated: boolean | "viewer" = true,
 ) {
   return async (request: Request): Promise<Response> => {
     try {
       if (!["GET", "HEAD"].includes(request.method)) checkOrigin(request);
-      if (authenticated) requireMaintainer(request);
+      if (authenticated === "viewer") requireViewer(request);
+      else if (authenticated) requireMaintainer(request);
       const result = await handler(request);
       const response =
         result instanceof Response ? result : Response.json(result);
