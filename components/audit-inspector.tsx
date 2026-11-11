@@ -7,6 +7,8 @@ import {
   FileCode2,
   Copy,
   ArrowUpRight,
+  Download,
+  GitPullRequest,
 } from "lucide-react";
 import { useState } from "react";
 import { Dialog } from "./dialog";
@@ -18,6 +20,7 @@ export function AuditInspector({
   row,
   demo,
   busy,
+  readOnly = false,
   onClose,
   onFund,
   onSubmit,
@@ -28,6 +31,7 @@ export function AuditInspector({
   row: LedgerRow;
   demo: boolean;
   busy: boolean;
+  readOnly?: boolean;
   onClose: () => void;
   onFund: () => void;
   onSubmit: () => void;
@@ -37,6 +41,31 @@ export function AuditInspector({
 }) {
   const verdict = row.audit?.verdict;
   const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const evidence = row.submission?.evidence;
+  const sourceUrl = row.submission?.sourceUrl;
+  const githubUrl = sourceUrl && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(sourceUrl) ? sourceUrl : null;
+  const downloadPacket = async () => {
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      let packet: unknown = { source: "DEMO_FIXTURE", simulated: true, exportedAt: new Date().toISOString(), bounty: row };
+      if (!demo) {
+        const response = await fetch(`/api/receipts/${row.id}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("The audit packet could not be downloaded. Refresh and try again.");
+        packet = await response.json();
+      }
+      const url = URL.createObjectURL(new Blob([JSON.stringify(packet, null, 2)], { type: "application/json" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `bountyguard-${row.id}-audit.json`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "The audit packet could not be downloaded.");
+    } finally { setDownloading(false); }
+  };
   return (
     <Dialog
       drawer
@@ -52,7 +81,29 @@ export function AuditInspector({
           <span>USD reward</span>
         </div>
         <p>{row.submission?.receiverEmail ?? "No contributor assigned"}</p>
+        {row.funding?.status === "HOLD" && <p className="form-error">Funding needs maintainer review. This reward cannot be released while its capture is on hold.</p>}
+        {row.submission?.contributorCountry && <p>Contributor country: {row.submission.contributorCountry} · self-reported</p>}
+        {readOnly && <p className="small warning-text">Judge access · financial actions disabled</p>}
+        <button className="button packet-download" onClick={() => void downloadPacket()} disabled={downloading}><Download size={16} />{downloading ? "Preparing packet…" : "Download audit packet"}</button>
+        {downloadError && <p className="form-error" role="alert">{downloadError}</p>}
       </div>
+      <section className="inspector-section">
+        <h3>Decision path</h3>
+        <ol className="decision-path inspector-decision-path">
+          {[{ label: "Fund", done: row.funding?.status === "COMPLETED" }, { label: "Prove", done: !!row.submission }, { label: "Verify", done: row.audit?.status === "COMPLETED" }, { label: "Decide", done: verdict?.status === "APPROVED" }, { label: "Settle", done: row.payout?.status === "SUCCESS" }].map((step, index) => <li key={step.label}><span className={`decision-number ${step.done ? "positive-text" : "muted"}`}>{step.done ? <Check size={14} /> : String(index + 1).padStart(2, "0")}</span><strong>{step.label}</strong></li>)}
+        </ol>
+      </section>
+      {row.submission && <section className="inspector-section">
+        <h3><GitPullRequest size={17} />Evidence source</h3>
+        <p className="small muted">{demo ? "Judge fixture · simulated evaluation" : row.submission.sourceKind === "GITHUB_PR" ? "GitHub pull request · immutable evidence snapshot" : "Pasted evidence · supplied by contributor"}</p>
+        {githubUrl && <a className="button compact packet-download" href={githubUrl} target="_blank" rel="noreferrer">Open pull request <ArrowUpRight size={14} /></a>}
+        {evidence && <>
+          <dl className="evidence-facts"><dt>Repository</dt><dd>{evidence.repository} #{evidence.prNumber}</dd><dt>Head commit</dt><dd className="measured">{evidence.headSha}</dd><dt>Target branch</dt><dd>{evidence.baseBranch}</dd><dt>Collected</dt><dd>{new Date(evidence.collectedAt).toLocaleString()}</dd><dt>Fingerprint</dt><dd className="measured">{evidence.fingerprint}</dd></dl>
+          <StatusBadge status={evidence.eligible ? "APPROVED" : "BLOCKED"} />
+          {evidence.checks.map((check, index) => <div className="evidence-check" key={`${check.name}-${index}`}><span className={check.conclusion === "success" ? "positive-text" : "warning-text"}>{check.conclusion === "success" ? <Check size={15} /> : <Clock3 size={15} />}</span><div><strong>{check.name}</strong><small>{check.appSlug}{check.workflowPath ? ` / ${check.workflowPath}` : ""}</small><small>{check.status} · {check.conclusion ?? "No result"} · {check.headSha.slice(0, 12)}</small></div></div>)}
+          {evidence.riskFlags.map((flag) => <p className="small negative-text" key={flag}>{flag}</p>)}
+        </>}
+      </section>}
       <section className="inspector-section">
         <h3>
           <ShieldCheck size={17} />
@@ -133,7 +184,7 @@ export function AuditInspector({
       <section className="inspector-section">
         <h3>Release policy</h3>
         <p>
-          Auto-release at ≥ {row.autoMinScore}% and ≤ {usd(row.autoMaxCents)},
+          Auto-release at score ≥ {row.autoMinScore}/100 and reward ≤ {usd(row.autoMaxCents)},
           after every criterion passes and funding is verified.
         </p>
         <p className="small muted">
@@ -221,22 +272,22 @@ export function AuditInspector({
         </section>
       )}
       <div className="inspector-actions">
-        {!row.payout && row.funding?.status !== "COMPLETED" && (
+        {!readOnly && !row.payout && row.funding?.status !== "COMPLETED" && !["HOLD", "REFUNDED", "PARTIALLY_REFUNDED", "REVERSED"].includes(row.funding?.status ?? "") && (
           <button className="button primary" onClick={onFund} disabled={busy}>
             Fund bounty <ArrowUpRight size={16} />
           </button>
         )}
-        {!row.payout && row.funding?.status === "COMPLETED" && (
+        {!readOnly && !row.payout && row.funding?.status === "COMPLETED" && (
           <button className="button" onClick={onSubmit} disabled={busy}>
             Submit work
           </button>
         )}
-        {!row.payout && row.submission && (
+        {!readOnly && !row.payout && row.submission && row.funding?.status === "COMPLETED" && (
           <button className="button" onClick={onAudit} disabled={busy}>
             {demo ? "Run fixture audit" : "Run AI audit"}
           </button>
         )}
-        {!row.payout && rowRelease(row) !== "BLOCKED" && (
+        {!readOnly && !row.payout && rowRelease(row) !== "BLOCKED" && (
           <button
             className="button primary"
             onClick={onRelease}
@@ -245,7 +296,7 @@ export function AuditInspector({
             Approve release <ArrowUpRight size={16} />
           </button>
         )}
-        {row.payout?.provider === "PAYPAL_SANDBOX" && (
+        {!readOnly && row.payout?.provider === "PAYPAL_SANDBOX" && (
           <button className="button" onClick={onSync} disabled={busy}>
             Refresh PayPal status
           </button>

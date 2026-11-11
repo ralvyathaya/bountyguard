@@ -83,6 +83,7 @@ export function rowRelease(row: LedgerRow) {
 export function rowStatus(row: LedgerRow): string {
   if (row.payout)
     return row.payout.status === "SUCCESS" ? "SETTLED" : row.payout.status;
+  if (row.funding?.status === "HOLD") return "FUNDING_HOLD";
   if (row.audit?.status === "RUNNING") return "AUDITING";
   if (row.audit?.status === "FAILED") return "AUDIT_FAILED";
   if (row.audit?.verdict?.status === "REVISION_REQUIRED")

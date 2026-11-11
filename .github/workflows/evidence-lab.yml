@@ -1,0 +1,20 @@
+name: BountyGuard evidence lab
+on:
+  pull_request:
+    paths:
+      - "examples/evidence-lab/**"
+      - ".github/workflows/evidence-lab.yml"
+permissions:
+  contents: read
+jobs:
+  evidence-lab:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test examples/evidence-lab/deliveries.test.mjs

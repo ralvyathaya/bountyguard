@@ -10,6 +10,8 @@ import {
   PayPalError,
   sandboxBaseUrl,
   verifyCapture,
+  getVerifiedCapture,
+  verifyWebhookSignature,
 } from "../lib/paypal";
 
 const originalFetch = globalThis.fetch;
@@ -206,4 +208,37 @@ test("ambiguous network failures never become simulated or successful payments",
     throw new DOMException("Timeout", "TimeoutError");
   });
   await assert.rejects(createPayout(payout), /response is unknown/);
+});
+
+test("funding reconciliation only reads provider objects and rejects a refunded capture", async () => {
+  const methods: string[] = [];
+  let refunded = false;
+  mockPayPal((url, init) => {
+    methods.push(init?.method ?? "GET");
+    return Response.json(url.includes("/v2/checkout/orders/") ? capture() : {
+      id: "CAPTURE1", status: refunded ? "REFUNDED" : "COMPLETED", amount: { currency_code: "USD", value: "35.00" },
+    });
+  });
+  assert.equal((await getVerifiedCapture("ORDER1", expected)).captureId, "CAPTURE1");
+  assert.deepEqual(methods, ["GET", "GET"]);
+  refunded = true;
+  await assert.rejects(getVerifiedCapture("ORDER1", expected), (error: unknown) => error instanceof Error && "code" in error && error.code === "FUNDING_HOLD");
+});
+
+test("webhook verification requires signed headers and uses the fixed Sandbox verification API", async () => {
+  process.env.PAYPAL_WEBHOOK_ID = "WH-CONFIGURED";
+  let calls = 0;
+  mockPayPal((url, init) => {
+    calls++;
+    assert.equal(url, "https://api-m.sandbox.paypal.com/v1/notifications/verify-webhook-signature");
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.webhook_id, "WH-CONFIGURED");
+    assert.equal(body.webhook_event.id, "EVENT1");
+    return Response.json({ verification_status: "SUCCESS" });
+  });
+  await assert.rejects(verifyWebhookSignature(new Headers(), { id: "EVENT1" }), /signature/i);
+  assert.equal(calls, 0);
+  const headers = new Headers({ "paypal-auth-algo": "SHA256withRSA", "paypal-cert-url": "https://api.sandbox.paypal.com/v1/notifications/certs/CERT1", "paypal-transmission-id": "T1", "paypal-transmission-sig": "signed", "paypal-transmission-time": new Date().toISOString() });
+  await verifyWebhookSignature(headers, { id: "EVENT1" });
+  assert.equal(calls, 1);
 });

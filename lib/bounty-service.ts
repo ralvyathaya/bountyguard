@@ -8,6 +8,7 @@ import {
   captureOrder,
   createPayout,
   getPayout,
+  getVerifiedCapture,
   PayPalError,
   type PayoutResult,
 } from "./paypal";
@@ -17,9 +18,12 @@ import {
   submissionSchema,
   criteriaSchema,
   verdictSchema,
+  evidencePolicySchema,
 } from "./validation";
 import { ledgerInclude } from "./ledger";
 import type { Payout } from "./generated/prisma/client";
+import { collectGitHubEvidence, evidenceForAudit, revalidateGitHubEvidence } from "./github-evidence";
+import type { AuditVerdict } from "./types";
 
 function money(value: string) {
   try {
@@ -36,6 +40,7 @@ export async function createBounty(input: z.infer<typeof bountySchema>) {
       rewardCents: money(input.reward),
       autoMinScore: input.autoMinScore,
       autoMaxCents: money(input.autoMaxReward),
+      ...(input.evidencePolicy ? { evidencePolicy: json(input.evidencePolicy) } : {}),
       events: {
         create: {
           type: "BOUNTY_CREATED",
@@ -50,12 +55,20 @@ export async function submitBounty(
   bountyId: string,
   input: z.infer<typeof submissionSchema>,
 ) {
+  const original = await db().bounty.findUnique({ where: { id: bountyId }, include: { funding: true, payout: true } });
+  if (!original) throw new AppError(404, "Bounty not found.");
+  if (original.funding?.status !== "COMPLETED" || original.payout) throw new AppError(409, "Only a funded bounty without a payout can receive a submission.");
+  const policy = original.evidencePolicy ? evidencePolicySchema.parse(original.evidencePolicy) : null;
+  if (policy && input.sourceKind !== "GITHUB_PR") throw new AppError(409, "This bounty requires a public GitHub PR from its configured repository.", "EVIDENCE_REQUIRED");
+  if (input.sourceKind === "GITHUB_PR" && (!policy || !input.sourceUrl)) throw new AppError(409, "GitHub submissions need a repository evidence policy and a PR URL.", "EVIDENCE_REQUIRED");
+  const evidence = policy && input.sourceKind === "GITHUB_PR" ? await collectGitHubEvidence(input.sourceUrl!, policy) : null;
   return transaction(async (tx) => {
     const bounty = await tx.bounty.findUnique({
       where: { id: bountyId },
       include: { funding: true, payout: true },
     });
     if (!bounty) throw new AppError(404, "Bounty not found.");
+    if (JSON.stringify(bounty.evidencePolicy) !== JSON.stringify(original.evidencePolicy)) throw new AppError(409, "The bounty evidence policy changed. Reload before submitting.");
     if (bounty.funding?.status !== "COMPLETED")
       throw new AppError(409, "Fund this bounty before submitting work.");
     if (bounty.payout)
@@ -73,7 +86,7 @@ export async function submitBounty(
         "An audit is running. Wait for its result before resubmitting.",
       );
     const submission = await tx.submission.create({
-      data: { bountyId, ...input },
+      data: { bountyId, ...input, ...(evidence ? { evidenceSnapshot: { create: { ...evidence, data: json(evidence.data) } } } : {}) },
     });
     await tx.bounty.update({
       where: { id: bountyId },
@@ -103,6 +116,7 @@ export async function fundOrder(bountyId: string) {
       include: { funding: true },
     });
     if (!bounty) throw new AppError(404, "Bounty not found.");
+    if (bounty.funding?.status === "HOLD") throw new AppError(409, "Funding is on hold for provider inspection.", "FUNDING_HOLD");
     if (bounty.funding?.status === "COMPLETED")
       throw new AppError(409, "This bounty is already funded.");
     if (bounty.funding) return bounty.funding;
@@ -135,15 +149,15 @@ export async function captureFunding(orderId: string) {
       404,
       "This order does not belong to a BountyGuard bounty.",
     );
-  if (funding.status === "COMPLETED")
-    return { captureId: funding.captureId, status: "COMPLETED" };
+  if (funding.status === "HOLD") throw new AppError(409, "Funding is on hold. Inspect the provider capture before continuing.", "FUNDING_HOLD");
+  if (funding.status === "COMPLETED") return reconcileFunding(orderId);
   const capture = await captureOrder(orderId, funding.captureKey, {
     bountyId: funding.bountyId,
     amountCents: funding.amountCents,
   });
   await transaction(async (tx) => {
     const updated = await tx.funding.updateMany({
-      where: { id: funding.id, status: { not: "COMPLETED" } },
+      where: { id: funding.id, status: { notIn: ["COMPLETED", "HOLD"] } },
       data: {
         status: "COMPLETED",
         captureId: capture.captureId,
@@ -159,7 +173,39 @@ export async function captureFunding(orderId: string) {
         },
       });
   });
+  const recorded = await db().funding.findUnique({ where: { id: funding.id } });
+  if (recorded?.status !== "COMPLETED" || recorded.captureId !== capture.captureId) throw new AppError(409, "Funding changed during capture and is on hold for inspection.", "FUNDING_HOLD");
   return { captureId: capture.captureId, status: "COMPLETED" };
+}
+
+export async function reconcileFunding(orderId: string) {
+  const funding = await db().funding.findUnique({ where: { orderId } });
+  if (!funding) throw new AppError(404, "Funding order not found.");
+  let capture: Awaited<ReturnType<typeof getVerifiedCapture>>;
+  try {
+    capture = await getVerifiedCapture(orderId, { bountyId: funding.bountyId, amountCents: funding.amountCents, captureId: funding.captureId });
+  } catch (error) {
+    if (error instanceof AppError && ["CAPTURE_MISMATCH", "FUNDING_HOLD"].includes(error.code)) {
+      await transaction(async tx => {
+        const changed = await tx.funding.updateMany({ where: { id: funding.id, status: { not: "HOLD" }, updatedAt: funding.updatedAt }, data: { status: "HOLD" } });
+        if (changed.count) await tx.ledgerEvent.create({ data: { bountyId: funding.bountyId, type: "FUNDING_HOLD", message: "A read-only PayPal check no longer confirms this capture as eligible funding. Release is blocked." } });
+      });
+      const recorded = await db().funding.findUnique({ where: { id: funding.id } });
+      if (recorded?.status !== "HOLD") throw new AppError(503, "Funding changed during reconciliation. Retry the provider check.", "FUNDING_RETRY");
+    }
+    throw error;
+  }
+  await transaction(async tx => {
+    const changed = await tx.funding.updateMany({ where: { id: funding.id, status: { notIn: ["COMPLETED", "HOLD"] }, updatedAt: funding.updatedAt }, data: { status: "COMPLETED", captureId: capture.captureId, receipt: json(capture.receipt) } });
+    if (changed.count) await tx.ledgerEvent.create({ data: { bountyId: funding.bountyId, type: "FUNDING_CAPTURED", message: `Verified USD capture ${capture.captureId} through read-only provider reconciliation.` } });
+  });
+  const recorded = await db().funding.findUnique({ where: { id: funding.id } });
+  if (recorded?.status !== "COMPLETED" || recorded.captureId !== capture.captureId) throw new AppError(409, "Funding remains on hold for maintainer inspection.", "FUNDING_HOLD");
+  return { captureId: capture.captureId, status: "COMPLETED" };
+}
+
+function withEvidenceRisks(verdict: AuditVerdict, riskFlags: string[]): AuditVerdict {
+  return riskFlags.length ? { ...verdict, status: "REVISION_REQUIRED", riskFlags: [...new Set([...riskFlags, ...verdict.riskFlags])].slice(0, 20), reasoning: `${verdict.reasoning}\nDeterministic evidence checks: ${riskFlags.join(" ")}`.slice(0, 8000) } : verdict;
 }
 
 export async function runAudit(submissionId: string) {
@@ -170,7 +216,7 @@ export async function runAudit(submissionId: string) {
   const { submission, criteria, auditId } = await transaction(async (tx) => {
     const submission = await tx.submission.findUnique({
       where: { id: submissionId },
-      include: { bounty: { include: { funding: true, payout: true } } },
+      include: { evidenceSnapshot: true, bounty: { include: { funding: true, payout: true } } },
     });
     if (!submission) throw new AppError(404, "Submission not found.");
     const bounty = submission.bounty;
@@ -220,16 +266,20 @@ export async function runAudit(submissionId: string) {
   const startedAt = performance.now();
   let result: Awaited<ReturnType<typeof auditDeliverable>>;
   try {
+    const evidence = submission.evidenceSnapshot ? evidenceForAudit(submission.evidenceSnapshot.data) : null;
+    const riskFlags = evidence?.riskFlags ?? (submission.bounty.evidencePolicy ? ["The required immutable GitHub evidence snapshot is missing."] : []);
     result = await auditDeliverable(
       criteria,
-      submission.deliverable,
+      evidence ? `${submission.deliverable}\n\n${evidence.text}` : submission.deliverable,
       async (steps) => {
         await db().auditRun.updateMany({
           where: { id: auditId, status: "RUNNING" },
-          data: { steps: json(steps) },
+          data: { steps: json(steps.map(step => ({ ...step, verdict: withEvidenceRisks(step.verdict, riskFlags) }))) },
         });
       },
     );
+    result.verdict = withEvidenceRisks(result.verdict, riskFlags);
+    result.steps = result.steps.map(step => ({ ...step, verdict: withEvidenceRisks(step.verdict, riskFlags) }));
   } catch (error) {
     const message =
       error instanceof AppError
@@ -314,6 +364,7 @@ export async function runAudit(submissionId: string) {
 }
 
 async function savePayout(previous: Payout, result: PayoutResult) {
+  if (!canTransitionPayout(previous.status, result.status)) return previous;
   return transaction(async (tx) => {
     const updated = await tx.payout.updateMany({
       where: { id: previous.id, updatedAt: previous.updatedAt },
@@ -326,6 +377,7 @@ async function savePayout(previous: Payout, result: PayoutResult) {
         error: result.error ?? null,
       },
     });
+    if (!updated.count) throw new AppError(503, "Payout changed during reconciliation. Retry the provider check.", "PAYOUT_RETRY");
     if (updated.count && previous.status !== result.status)
       await tx.ledgerEvent.create({
         data: {
@@ -339,6 +391,12 @@ async function savePayout(previous: Payout, result: PayoutResult) {
       });
     return tx.payout.findUniqueOrThrow({ where: { id: previous.id } });
   });
+}
+
+export function canTransitionPayout(previous: string, next: string) {
+  if (previous === "SUCCESS") return ["SUCCESS", "RETURNED", "REFUNDED", "REVERSED"].includes(next);
+  if (["RETURNED", "REFUNDED", "REVERSED", "SIMULATED"].includes(previous)) return previous === next;
+  return true;
 }
 async function sendPayout(payout: Payout) {
   try {
@@ -371,6 +429,18 @@ export async function settleBounty(
 ) {
   requiredEnv("PAYPAL_CLIENT_ID");
   requiredEnv("PAYPAL_CLIENT_SECRET");
+  const preflight = await db().bounty.findUnique({ where: { id: bountyId }, include: { funding: true, payout: true, currentSubmission: { include: { evidenceSnapshot: true } } } });
+  if (!preflight) throw new AppError(404, "Bounty not found.");
+  if (!preflight.payout) {
+    if (preflight.currentSubmissionId !== submissionId || preflight.funding?.status !== "COMPLETED" || !preflight.funding.orderId || !preflight.funding.captureId)
+      throw new AppError(409, "The server release policy blocked this payout: verified current funding and submission are required.", "PAYOUT_BLOCKED");
+    await reconcileFunding(preflight.funding.orderId);
+    if (preflight.evidencePolicy) {
+      const evidence = preflight.currentSubmission?.evidenceSnapshot;
+      if (!evidence) throw new AppError(409, "Required GitHub evidence is missing.", "EVIDENCE_REQUIRED");
+      await revalidateGitHubEvidence(evidence, evidencePolicySchema.parse(preflight.evidencePolicy));
+    }
+  }
   const claim = await transaction(async (tx) => {
     const bounty = await tx.bounty.findUnique({
       where: { id: bountyId },
@@ -483,4 +553,12 @@ export async function syncPayout(id: string) {
     return sendPayout(payout);
   }
   return payout;
+}
+
+export async function reconcilePayoutBatch(id: string, batchId: string) {
+  const payout = await db().payout.findUnique({ where: { id } });
+  if (!payout) throw new AppError(404, "Payout not found.");
+  if (payout.provider === "SIMULATION") return payout;
+  if (payout.batchId && payout.batchId !== batchId) throw new AppError(409, "Webhook batch does not match the stored payout.", "PAYOUT_MISMATCH");
+  return savePayout(payout, await getPayout(batchId, payout));
 }

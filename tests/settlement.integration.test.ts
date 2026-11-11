@@ -14,9 +14,21 @@ test(
     process.env.PAYPAL_BASE_URL = "https://api-m.sandbox.paypal.com";
     const originalFetch = globalThis.fetch;
     let payoutCalls = 0;
+    let fundingReads = 0;
+    let bountyId = "";
+    const orderId = `TESTORDER${randomUUID().replaceAll("-", "")}`;
+    const captureId = `TESTCAPTURE${randomUUID().replaceAll("-", "")}`;
     globalThis.fetch = async (input) => {
       if (String(input).endsWith("/v1/oauth2/token"))
         return Response.json({ access_token: "test-token", expires_in: 300 });
+      if (String(input).includes("/v2/checkout/orders/")) {
+        fundingReads++;
+        return Response.json({ id: orderId, status: "COMPLETED", purchase_units: [{ reference_id: bountyId, custom_id: bountyId, payments: { captures: [{ id: captureId, status: "COMPLETED", final_capture: true, amount: { currency_code: "USD", value: "35.00" } }] } }] });
+      }
+      if (String(input).includes("/v2/payments/captures/")) {
+        fundingReads++;
+        return Response.json({ id: captureId, status: "COMPLETED", amount: { currency_code: "USD", value: "35.00" } });
+      }
       payoutCalls++;
       return Response.json({
         batch_header: {
@@ -35,10 +47,13 @@ test(
             captureKey: randomUUID(),
             amountCents: 3500,
             status: "COMPLETED",
+            orderId,
+            captureId,
           },
         },
       },
     });
+    bountyId = bounty.id;
     try {
       const submission = await db().submission.create({
         data: {
@@ -92,6 +107,7 @@ test(
         1,
       );
       assert.equal(payoutCalls, 1);
+      assert.ok(fundingReads >= 2, "Release must recheck authoritative funding before a payout claim");
     } finally {
       globalThis.fetch = originalFetch;
       await db().bounty.delete({ where: { id: bounty.id } });
