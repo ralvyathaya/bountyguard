@@ -21,7 +21,7 @@ import {
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 const gridTheme = themeQuartz.withParams({
-  browserColorScheme: "dark",
+  browserColorScheme: "light",
   backgroundColor: "var(--color-paper)",
   foregroundColor: "var(--color-ink-2)",
   headerBackgroundColor: "var(--color-paper-2)",
@@ -57,7 +57,7 @@ export function StatusBadge({ status }: { status: string }) {
           "REVERSED",
         ].includes(status)
       ? "negative"
-      : ["AWAITING_APPROVAL", "UNKNOWN", "ONHOLD", "UNCLAIMED"].includes(status)
+      : ["AWAITING_APPROVAL", "UNKNOWN", "ONHOLD", "FUNDING_HOLD", "HOLD", "REFUNDED", "PARTIALLY_REFUNDED", "UNCLAIMED"].includes(status)
         ? "warning"
         : [
               "AUDITING",
@@ -75,6 +75,7 @@ export function LedgerGrid({
   rows,
   search,
   busy,
+  readOnly = false,
   onInspect,
   onRelease,
   onReady,
@@ -82,6 +83,7 @@ export function LedgerGrid({
   rows: LedgerRow[];
   search: string;
   busy: boolean;
+  readOnly?: boolean;
   onInspect: (row: LedgerRow) => void;
   onRelease: (row: LedgerRow) => void;
   onReady: (api: GridApi<LedgerRow>) => void;
@@ -149,7 +151,7 @@ export function LedgerGrid({
               </span>
               <span>
                 {p.value}
-                <span className="muted">%</span>
+                <span className="muted">/100</span>
               </span>
             </div>
           ),
@@ -220,7 +222,7 @@ export function LedgerGrid({
             >
               <ScanLine size={17} />
             </button>
-            {p.data && !p.data.payout && rowRelease(p.data) !== "BLOCKED" && (
+            {!readOnly && p.data && !p.data.payout && rowRelease(p.data) !== "BLOCKED" && (
               <button
                 className="icon-button release-action"
                 disabled={busy}
@@ -235,7 +237,7 @@ export function LedgerGrid({
         ),
       },
     ],
-    [onInspect, onRelease, busy],
+    [onInspect, onRelease, busy, readOnly],
   );
   return (
     <div className="grid-frame" aria-label="Bounty financial and agent ledger">

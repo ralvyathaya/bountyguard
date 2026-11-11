@@ -12,6 +12,23 @@ export type AuditVerdict = {
   riskFlags: string[];
 };
 export type AuditStep = { name: string; verdict: AuditVerdict };
+export type SessionRole = "maintainer" | "judge";
+export type EvidencePolicy = {
+  repository: string;
+  baseBranch: string;
+  requiredChecks: { name: string; appSlug: string; workflowPath?: string }[];
+};
+export type EvidenceSummary = {
+  repository: string;
+  prNumber: number;
+  headSha: string;
+  fingerprint: string;
+  eligible: boolean;
+  collectedAt: string;
+  baseBranch: string;
+  riskFlags: string[];
+  checks: { name: string; appSlug: string; workflowPath?: string; headSha: string; status: string; conclusion: string | null }[];
+};
 export type LedgerRow = {
   id: string;
   title: string;
@@ -19,12 +36,17 @@ export type LedgerRow = {
   rewardCents: number;
   autoMinScore: number;
   autoMaxCents: number;
+  evidencePolicy?: EvidencePolicy | null;
   createdAt: string;
   submission: {
     id: string;
     receiverEmail: string;
     deliverable: string;
     createdAt: string;
+    sourceKind?: string;
+    sourceUrl?: string | null;
+    contributorCountry?: string | null;
+    evidence?: EvidenceSummary | null;
   } | null;
   audit: {
     id: string;

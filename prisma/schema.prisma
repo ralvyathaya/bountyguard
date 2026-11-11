@@ -15,6 +15,7 @@ model Bounty {
   currency            String        @default("USD")
   autoMinScore        Int           @default(90)
   autoMaxCents        Int           @default(5000)
+  evidencePolicy      Json?
   currentSubmissionId String?       @unique
   currentSubmission   Submission?   @relation("CurrentSubmission", fields: [currentSubmissionId], references: [id], onDelete: SetNull)
   auditClaim          String?
@@ -34,6 +35,10 @@ model Submission {
   currentFor    Bounty?    @relation("CurrentSubmission")
   receiverEmail String
   deliverable   String
+  sourceKind    String     @default("TEXT")
+  sourceUrl     String?
+  contributorCountry String?
+  evidenceSnapshot EvidenceSnapshot?
   createdAt     DateTime   @default(now())
   audits        AuditRun[]
   @@index([bountyId])
@@ -106,4 +111,52 @@ model LoginLimit {
   key       String   @id
   attempts  Int      @default(1)
   expiresAt DateTime
+}
+
+model EvidenceSnapshot {
+  id           String @id @default(cuid())
+  submissionId String @unique
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  sourceUrl    String
+  repository   String
+  prNumber     Int
+  headSha      String
+  fingerprint  String
+  eligible     Boolean
+  data         Json
+  collectedAt  DateTime @default(now())
+}
+
+model SavedDashboard {
+  id        String @id @default("workspace")
+  version   Int @default(1)
+  state     Json
+  updatedAt DateTime @updatedAt
+}
+
+model AgentRun {
+  id          String @id @default(cuid())
+  sessionHash String
+  role        String
+  dataMode    String
+  status      String @default("ACTIVE")
+  modelCalls  Int @default(0)
+  messages    Json @default("[]")
+  events      Json @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  expiresAt   DateTime
+  @@index([sessionHash, createdAt])
+}
+
+model ProviderWebhookEvent {
+  id          String @id
+  type        String
+  status      String @default("RECEIVED")
+  attempts    Int @default(0)
+  payload     Json?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  processedAt DateTime?
 }

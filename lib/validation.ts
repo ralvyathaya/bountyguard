@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COUNTRY_CODES } from "./countries";
 
 export const criterionSchema = z
   .object({
@@ -14,6 +15,15 @@ export const criteriaSchema = z
     (items) => new Set(items.map((item) => item.id)).size === items.length,
     "Criterion IDs must be unique.",
   );
+export const evidencePolicySchema = z.object({
+  repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(200),
+  baseBranch: z.string().min(1).max(200).default("main"),
+  requiredChecks: z.array(z.object({
+    name: z.string().min(1).max(160),
+    appSlug: z.string().regex(/^[a-zA-Z0-9-]+$/).max(100),
+    workflowPath: z.string().regex(/^\.github\/workflows\/[a-zA-Z0-9_.-]+\.ya?ml$/).optional(),
+  }).strict()).min(1).max(10),
+}).strict();
 export const bountySchema = z
   .object({
     title: z.string().trim().min(3).max(160),
@@ -21,6 +31,7 @@ export const bountySchema = z
     reward: z.string().max(16),
     autoMinScore: z.number().int().min(0).max(100).default(90),
     autoMaxReward: z.string().max(16).default("50.00"),
+    evidencePolicy: evidencePolicySchema.optional(),
   })
   .strict();
 export const submissionSchema = z
@@ -35,6 +46,9 @@ export const submissionSchema = z
         "PayPal requires an ASCII email address.",
       ),
     deliverable: z.string().trim().min(20).max(80000),
+    sourceKind: z.enum(["TEXT", "GITHUB_PR"]).default("TEXT"),
+    sourceUrl: z.string().url().max(300).optional(),
+    contributorCountry: z.string().refine(value=>COUNTRY_CODES.has(value),"Supply a valid ISO country code.").optional(),
   })
   .strict();
 export const idSchema = z
@@ -78,6 +92,7 @@ export const demoLedgerSchema = z
       rewardCents: z.number().int().positive().max(100000000),
       autoMinScore: z.number().int().min(0).max(100),
       autoMaxCents: z.number().int().positive(),
+      evidencePolicy: evidencePolicySchema.nullable().optional(),
       createdAt: z.string(),
       submission: z
         .object({
@@ -85,6 +100,13 @@ export const demoLedgerSchema = z
           receiverEmail: z.string(),
           deliverable: z.string().max(80000),
           createdAt: z.string(),
+          sourceKind: z.enum(["TEXT", "GITHUB_PR"]).optional(),
+          sourceUrl: z.string().max(300).nullable().optional(),
+          contributorCountry: z.string().max(2).nullable().optional(),
+          evidence: z.object({
+            repository:z.string().max(200),prNumber:z.number().int(),headSha:z.string().max(64),fingerprint:z.string().max(64),eligible:z.boolean(),collectedAt:z.string(),baseBranch:z.string().max(200),riskFlags:z.array(z.string().max(1000)).max(30),
+            checks:z.array(z.object({name:z.string().max(160),appSlug:z.string().max(100),workflowPath:z.string().max(300).optional(),headSha:z.string().max(64),status:z.string().max(50),conclusion:z.string().max(50).nullable()})).max(100),
+          }).nullable().optional(),
         })
         .nullable(),
       audit: z

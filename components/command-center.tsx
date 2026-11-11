@@ -8,6 +8,7 @@ import {
   type FormEvent,
 } from "react";
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
+import dynamic from "next/dynamic";
 import { ZodError } from "zod";
 import {
   Activity,
@@ -37,7 +38,8 @@ import {
   Zap,
 } from "lucide-react";
 import type { GridApi } from "ag-grid-community";
-import type { AppMode, LedgerRow } from "@/lib/types";
+import type { AppMode, LedgerRow, SessionRole } from "@/lib/types";
+import type { AnalyticsSummary } from "@/lib/analytics-types";
 import {
   completeDemoAudit,
   createDemoRows,
@@ -61,12 +63,18 @@ import { LedgerGrid } from "./ledger-grid";
 import { AuditInspector } from "./audit-inspector";
 import { Dialog } from "./dialog";
 
-const STORE = "bountyguard-demo-v1";
+const StudioWorkspace = dynamic(
+  () => import("./studio-workspace").then((module) => module.StudioWorkspace),
+  { ssr: false, loading: () => <div className="studio-loading" role="status"><LoaderCircle size={20} className="spin" /> Loading your analytics workspace</div> },
+);
+
+const STORE = "bountyguard-demo-v2";
 type Modal =
   | { kind: "create" | "login" | "guide" | "reset" }
   | { kind: "fund" | "submit" | "release"; rowId: string }
   | null;
 type View = "all" | "review" | "settled" | "blocked";
+type WorkspaceView = "overview" | "ledger" | "studio";
 type Notice = { tone: "success" | "error" | "info"; text: string } | null;
 
 async function requestJson<T>(url: string, body?: unknown): Promise<T> {
@@ -100,19 +108,29 @@ function readDemo(): LedgerRow[] {
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export function CommandCenter() {
+export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string }) {
   const [mode, setMode] = useState<AppMode>("demo");
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
+  const [role, setRole] = useState<SessionRole | null>(null);
+  const [loginRole, setLoginRole] = useState<SessionRole>("maintainer");
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("overview");
+  const [studioVisited, setStudioVisited] = useState(false);
+  const [studioFilter, setStudioFilter] = useState<string[] | null>(null);
+  const [serverSummary, setServerSummary] = useState<AnalyticsSummary | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [config, setConfig] = useState<{
     paypalClientId: string | null;
     missing: string[];
+    judgeAvailable?: boolean;
   } | null>(null);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<View>("all");
   const [modal, setModal] = useState<Modal>(null);
-  const [inspectId, setInspectId] = useState<string | null>(null);
+  const [inspectId, setInspectIdState] = useState<string | null>(null);
+  const inspectIdRef = useRef(inspectId);
+  inspectIdRef.current = inspectId;
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState("");
   const [stage, setStage] = useState("");
@@ -120,6 +138,12 @@ export function CommandCenter() {
   const grid = useRef<GridApi<LedgerRow> | null>(null);
   const demoRows = useRef<LedgerRow[]>([]);
   const modeRef = useRef<AppMode>("demo");
+  const ledgerEpoch = useRef(0);
+  const setInspectId = useCallback((id: string | null) => {
+    ledgerEpoch.current++;
+    inspectIdRef.current = id;
+    setInspectIdState(id);
+  }, []);
 
   useEffect(() => {
     const initial = readDemo();
@@ -131,9 +155,12 @@ export function CommandCenter() {
     const selected = params.get("view");
     if (["all", "review", "settled", "blocked"].includes(selected ?? ""))
       setView(selected as View);
-    requestJson<{ authenticated: boolean }>("/api/auth/session")
-      .then((result) => setAuthenticated(result.authenticated))
-      .catch(() => setAuthenticated(false));
+    requestJson<{ authenticated: boolean; role: SessionRole | null }>("/api/auth/session")
+      .then((result) => {
+        setAuthenticated(result.authenticated);
+        setRole(result.role);
+      })
+      .catch(() => { setAuthenticated(false); setRole(null); });
   }, []);
   useEffect(() => {
     if (mode !== "demo" || loading) return;
@@ -154,8 +181,21 @@ export function CommandCenter() {
   }, [search, view]);
 
   const refresh = useCallback(async () => {
-    const result = await requestJson<{ rows: LedgerRow[] }>("/api/bounties");
-    if (modeRef.current === "connected") setRows(result.rows);
+    const epoch = ++ledgerEpoch.current;
+    const [result, analytics] = await Promise.all([
+      requestJson<{ rows: LedgerRow[] }>("/api/bounties"),
+      requestJson<{ summary: AnalyticsSummary; asOf: string }>("/api/analytics?summary=1"),
+    ]);
+    const selectedId = inspectIdRef.current;
+    if (selectedId && !result.rows.some((row) => row.id === selectedId)) {
+      const detail = await requestJson<{ rows: LedgerRow[] }>(`/api/bounties?id=${encodeURIComponent(selectedId)}`);
+      result.rows.push(...detail.rows);
+    }
+    if (epoch === ledgerEpoch.current && modeRef.current === "connected") {
+      setRows(result.rows);
+      setServerSummary(analytics.summary);
+      setUpdatedAt(analytics.asOf);
+    }
   }, []);
   const operate = useCallback(
     async (label: string, work: () => Promise<void>) => {
@@ -192,16 +232,22 @@ export function CommandCenter() {
       return;
     }
     await operate("Loading sandbox ledger", async () => {
-      const [ledgerData, setup] = await Promise.all([
+      const epoch = ++ledgerEpoch.current;
+      const [ledgerData, setup, analytics] = await Promise.all([
         requestJson<{ rows: LedgerRow[] }>("/api/bounties"),
         requestJson<{ paypalClientId: string | null; missing: string[] }>(
           "/api/config",
         ),
+        requestJson<{ summary: AnalyticsSummary; asOf: string }>("/api/analytics?summary=1"),
       ]);
+      if (epoch !== ledgerEpoch.current) return;
       setConfig(setup);
       modeRef.current = "connected";
       setMode("connected");
       setRows(ledgerData.rows);
+      setServerSummary(analytics.summary);
+      setUpdatedAt(analytics.asOf);
+      setStudioFilter(null);
       setInspectId(null);
       setView("all");
       setSearch("");
@@ -209,18 +255,22 @@ export function CommandCenter() {
   };
   const enterDemo = () => {
     if (active.current) return;
+    ledgerEpoch.current++;
     modeRef.current = "demo";
     setMode("demo");
     setRows(demoRows.current);
+    setServerSummary(null);
+    setUpdatedAt(null);
+    setStudioFilter(null);
     setInspectId(null);
     setNotice(null);
     setView("all");
   };
   useEffect(() => {
-    if (mode !== "connected" || !authenticated) return;
+    if (mode !== "connected" || role !== "maintainer") return;
     let syncing = false;
     const tick = async () => {
-      if (syncing || active.current) return;
+      if (syncing || active.current || document.hidden) return;
       const pending = rows.filter(
         (row) =>
           row.payout?.provider === "PAYPAL_SANDBOX" &&
@@ -251,13 +301,31 @@ export function CommandCenter() {
       void tick().catch(() => undefined);
     }, 5000);
     return () => clearInterval(timer);
-  }, [mode, authenticated, rows, refresh]);
+  }, [mode, role, rows, refresh]);
+  useEffect(() => {
+    if (mode !== "connected" || !authenticated) return;
+    const update = () => {
+      if (document.hidden || active.current) return;
+      void refresh().catch(() => setNotice({ tone: "error", text: "Ledger refresh failed. Displayed data is from the last successful update." }));
+    };
+    const timer = setInterval(update, 15000);
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
+    return () => { clearInterval(timer); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", update); };
+  }, [mode, authenticated, refresh]);
+
+  const canManage = mode === "demo" || role === "maintainer";
+  const navigate = (next: WorkspaceView) => {
+    setWorkspaceView(next);
+    if (next === "studio") setStudioVisited(true);
+  };
 
   const replaceRow = (row: LedgerRow) =>
     setRows((current) =>
       current.map((item) => (item.id === row.id ? row : item)),
     );
   const runAudit = async (row: LedgerRow, scenario?: "A" | "B" | "C") => {
+    if (!canManage) return;
     scenario ??=
       row.id === "BG-1043" ? "B" : row.id === "BG-1044" ? "C" : undefined;
     setView("all");
@@ -360,17 +428,36 @@ export function CommandCenter() {
   const inspect = useCallback((row: LedgerRow) => {
     setInspectId(row.id);
   }, []);
+  const inspectStudioBounty = useCallback((id: string) => {
+    if (rows.some((row) => row.id === id)) {
+      setInspectId(id);
+      return;
+    }
+    if (modeRef.current !== "connected") {
+      setNotice({ tone: "info", text: "That bounty is not available in the current demo dataset." });
+      return;
+    }
+    void operate("Loading bounty evidence", async () => {
+      const epoch = ++ledgerEpoch.current;
+      const detail = await requestJson<{ rows: LedgerRow[] }>(`/api/bounties?id=${encodeURIComponent(id)}`);
+      if (epoch !== ledgerEpoch.current || modeRef.current !== "connected") return;
+      if (!detail.rows.length) throw new Error("This bounty is no longer available.");
+      setRows((current) => [...current.filter((row) => row.id !== id), ...detail.rows]);
+      setInspectId(id);
+    });
+  }, [rows, operate]);
   const release = useCallback((row: LedgerRow) => {
     setNotice(null);
     setInspectId(null);
     setModal({ kind: "release", rowId: row.id });
   }, []);
   const openModal = (value: Modal) => {
+    if (value && ["create", "fund", "submit", "release"].includes(value.kind) && !canManage) return;
     setNotice(null);
     setInspectId(null);
     setModal(value);
   };
-  const kpis = useMemo(() => ledgerKpis(rows, mode === "demo"), [rows, mode]);
+  const kpis = useMemo(() => mode === "connected" ? serverSummary : ledgerKpis(rows, true), [rows, mode, serverSummary]);
   const counts = useMemo(
     () => ({
       all: rows.length,
@@ -389,7 +476,7 @@ export function CommandCenter() {
     () =>
       rows.filter(
         (row) =>
-          view === "all" ||
+          (!studioFilter || studioFilter.includes(row.id)) && (view === "all" ||
           (view === "review"
             ? rowStatus(row) === "AWAITING_APPROVAL"
             : view === "settled"
@@ -399,9 +486,9 @@ export function CommandCenter() {
                   "FAILED",
                   "AUDIT_FAILED",
                   "BLOCKED",
-                ].includes(rowStatus(row))),
+                ].includes(rowStatus(row)))),
       ),
-    [rows, view, mode],
+    [rows, view, mode, studioFilter],
   );
   const inspected = rows.find((row) => row.id === inspectId);
   const modalRow =
@@ -427,13 +514,21 @@ export function CommandCenter() {
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canManage) return;
     const data = new FormData(event.currentTarget);
     await operate("Creating bounty", async () => {
+      const repository = String(data.get("repository") ?? "").trim();
+      const workflowPath = String(data.get("workflowPath") ?? "").trim();
       const parsed = bountySchema.parse({
         title: data.get("title"),
         reward: data.get("reward"),
         autoMaxReward: data.get("autoMaxReward"),
         autoMinScore: Number(data.get("autoMinScore")),
+        ...(repository ? { evidencePolicy: {
+          repository,
+          baseBranch: String(data.get("baseBranch") || "main").trim(),
+          requiredChecks: [{ name: String(data.get("checkName") || "verify").trim(), appSlug: String(data.get("appSlug") || "github-actions").trim(), ...(workflowPath ? { workflowPath } : {}) }],
+        } } : {}),
         criteria: String(data.get("criteria"))
           .split("\n")
           .map((line) => line.trim())
@@ -451,6 +546,7 @@ export function CommandCenter() {
           rewardCents: dollarsToCents(parsed.reward),
           autoMinScore: parsed.autoMinScore,
           autoMaxCents: dollarsToCents(parsed.autoMaxReward),
+          evidencePolicy: parsed.evidencePolicy ?? null,
           createdAt: new Date().toISOString(),
           submission: null,
           audit: null,
@@ -476,13 +572,21 @@ export function CommandCenter() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!modalRow) return;
+    if (!canManage) return;
     const data = new FormData(event.currentTarget);
     const row = modalRow;
     const success = await operate("Saving submission", async () => {
+      const sourceKind = String(data.get("sourceKind") || "TEXT");
+      const sourceUrl = String(data.get("sourceUrl") ?? "").trim();
+      const contributorCountry = String(data.get("contributorCountry") ?? "").trim().toUpperCase();
       const parsed = submissionSchema.parse({
         receiverEmail: data.get("receiverEmail"),
         deliverable: data.get("deliverable"),
+        sourceKind,
+        ...(sourceKind === "GITHUB_PR" && sourceUrl ? { sourceUrl } : {}),
+        ...(contributorCountry ? { contributorCountry } : {}),
       });
+      if (parsed.sourceKind === "GITHUB_PR" && !parsed.sourceUrl) throw new Error("Provide a public GitHub pull request URL.");
       if (mode === "connected") {
         await requestJson(`/api/bounties/${row.id}/submissions`, parsed);
         await refresh();
@@ -513,6 +617,7 @@ export function CommandCenter() {
     return success;
   }
   const approveRelease = () => {
+    if (!canManage) return;
     if (!modalRow?.submission) return;
     const row = modalRow;
     void operate("Releasing reward", async () => {
@@ -553,14 +658,17 @@ export function CommandCenter() {
             Workspace <ChevronDown size={13} />
           </span>
           <nav className="top-nav" aria-label="Main navigation">
-            <a href="#main" className="nav-active">
-              Command center
-            </a>
+            {(["overview", "ledger", "studio"] as WorkspaceView[]).map((key) => (
+              <button key={key} className={workspaceView === key ? "nav-active" : ""} aria-current={workspaceView === key ? "page" : undefined} onClick={() => navigate(key)}>
+                {key === "overview" ? "Overview" : key === "ledger" ? "Bounty ledger" : "Studio"}
+              </button>
+            ))}
             <button onClick={() => openModal({ kind: "guide" })}>
               How it works <ExternalLink size={12} />
             </button>
           </nav>
           <div className="topbar-right">
+            {!authenticated && <button className="button compact judge-access" onClick={() => { setLoginRole("judge"); openModal({ kind: "login" }); }}>Judge access</button>}
             <span className="sandbox-label">
               <ShieldCheck size={13} />
               Sandbox only
@@ -578,23 +686,30 @@ export function CommandCenter() {
               className="avatar"
               aria-label={
                 authenticated
-                  ? "Sign out maintainer"
-                  : "Unlock maintainer access"
+                  ? `Sign out ${role ?? "session"}`
+                  : "Sign in"
               }
               onClick={() => {
                 if (authenticated)
                   void operate("Signing out", async () => {
+                    ledgerEpoch.current++;
                     await requestJson("/api/auth/logout", {});
                     setAuthenticated(false);
+                    setRole(null);
+                    setModal(null);
+                    setInspectId(null);
+                    setServerSummary(null);
+                    setUpdatedAt(null);
+                    setStudioFilter(null);
                     modeRef.current = "demo";
                     setMode("demo");
                     setRows(demoRows.current);
                     setConfig(null);
                   });
-                else openModal({ kind: "login" });
+                else { setLoginRole("maintainer"); openModal({ kind: "login" }); }
               }}
             >
-              {authenticated ? "M" : "BG"}
+              {authenticated ? role === "judge" ? "J" : "M" : "BG"}
             </button>
           </div>
         </div>
@@ -603,10 +718,10 @@ export function CommandCenter() {
         <div className="page-heading">
           <div>
             <div className="breadcrumb">
-              Workspace <span>/</span> Overview
+              Workspace <span>/</span> {workspaceView === "overview" ? "Overview" : workspaceView === "ledger" ? "Bounty ledger" : "Studio"}
             </div>
-            <h1>Bounty command center</h1>
-            <p>Verify the work. Release the reward. Keep the proof.</p>
+            <h1>{workspaceView === "studio" ? "Explore the evidence behind every reward" : workspaceView === "ledger" ? "Bounty ledger" : "Work verified. Rewards released."}</h1>
+            <p>{workspaceView === "studio" ? "Build a dashboard, ask a question, follow the proof." : "A clear path from submitted work to a verified PayPal reward."}</p>
           </div>
           <div className="heading-actions">
             <div className="mode-switch" aria-label="Application mode">
@@ -627,14 +742,14 @@ export function CommandCenter() {
                 Sandbox connected
               </button>
             </div>
-            <button
+            {canManage && <button
               className="button primary"
               onClick={() => openModal({ kind: "create" })}
               disabled={!!busy || loading}
             >
               <Plus size={16} />
               Create bounty
-            </button>
+            </button>}
           </div>
         </div>
         <div
@@ -649,8 +764,7 @@ export function CommandCenter() {
               </>
             ) : (
               <>
-                <strong>PayPal Sandbox connected.</strong> Real custom LLM calls
-                and sandbox API operations. No live money.
+                <strong>{role === "judge" ? "Judge access · financial records are read-only." : "PayPal Sandbox workspace."}</strong> {role === "judge" ? "Inspect evidence and try live analytics AI. Funding, audits, and releases are disabled." : "Real custom LLM calls and sandbox API operations. No live money."}
               </>
             )}
           </p>
@@ -671,6 +785,10 @@ export function CommandCenter() {
               Refresh ledger
             </button>
           )}
+        </div>
+        <div className="workspace-context">
+          <span className="source-stamp"><span className="source-dot" />{mode === "demo" ? "Demo data · scripted audits" : "Sandbox ledger · provider-linked records"}</span>
+          <span>{mode === "connected" ? updatedAt ? `Updated ${new Date(updatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Loading financial summary…" : "Fixtures stay in this browser"}</span>
         </div>
         {mode === "connected" && !!config?.missing.length && (
           <div className="notice info">
@@ -701,16 +819,16 @@ export function CommandCenter() {
             </button>
           </div>
         )}
-        <section className="kpi-strip" aria-label="Financial overview">
+        <section className="kpi-strip" aria-label="Financial overview" hidden={workspaceView !== "overview"}>
           <div className="kpi">
-            <span>Total escrow funded</span>
-            <strong>{loading ? "—" : usd(kpis.fundedCents)}</strong>
+            <span>Gross funding verified</span>
+            <strong>{loading || !kpis ? "—" : usd(kpis.fundedCents)}</strong>
             <p>Verified USD captures{mode === "demo" ? " / simulated" : ""}</p>
           </div>
           <div className="kpi">
             <span>Autonomous payouts</span>
             <strong>
-              {loading ? "—" : kpis.autonomousPayouts}
+              {loading || !kpis ? "—" : kpis.autonomousPayouts}
               <span className="kpi-unit">executed</span>
             </strong>
             <p>
@@ -722,7 +840,7 @@ export function CommandCenter() {
           <div className="kpi">
             <span>Average verification time</span>
             <strong>
-              {kpis.averageMs == null
+              {kpis?.averageMs == null
                 ? "—"
                 : (kpis.averageMs / 1000).toFixed(1)}
               <span className="kpi-unit">seconds</span>
@@ -730,15 +848,21 @@ export function CommandCenter() {
             <p>Across completed {mode === "demo" ? "fixture" : "AI"} audits</p>
           </div>
           <div className="kpi">
-            <span>Prevented bad payouts</span>
+            <span>Rejected submissions</span>
             <strong>
-              {loading ? "—" : kpis.prevented}
+              {loading || !kpis ? "—" : kpis.prevented}
               <span className="kpi-unit">blocked</span>
             </strong>
-            <p>Incomplete work caught before release</p>
+            <p>Evidence requiring revision before release</p>
           </div>
         </section>
-        <section className="judge-section" aria-label="Judge scenarios">
+        <section className="decision-panel" aria-label="Evidence to payout decision path" hidden={workspaceView !== "overview"}>
+          <div className="decision-intro"><span className="eyebrow">The path to a reward</span><h2>Every release has a reason</h2><p>Follow the funding, the evidence, and the decision that connects them.</p></div>
+          <ol className="decision-path">
+            {[{ label: "Fund", detail: "PayPal capture" }, { label: "Prove", detail: "Text or GitHub PR" }, { label: "Verify", detail: "Two-stage audit" }, { label: "Decide", detail: "Policy + approval" }, { label: "Settle", detail: "Item-level receipt" }].map((step, index) => <li key={step.label}><span className="decision-number">{String(index + 1).padStart(2, "0")}</span><strong>{step.label}</strong><span>{step.detail}</span></li>)}
+          </ol>
+        </section>
+        <section className="judge-section" aria-label="Judge scenarios" hidden={workspaceView !== "overview"}>
           <div className="section-heading">
             <div>
               <h2>
@@ -762,7 +886,7 @@ export function CommandCenter() {
               <span className="scenario-letter positive">A</span>
               <div>
                 <h3>Good work. Instant reward.</h3>
-                <p>Bugfix → 96% verified → auto-release</p>
+                <p>Bugfix → 96 audit score → auto-release</p>
               </div>
               <div className="scenario-end">
                 <strong>$35</strong>
@@ -791,7 +915,7 @@ export function CommandCenter() {
               <span className="scenario-letter warning">C</span>
               <div>
                 <h3>Big reward. Human decision.</h3>
-                <p>Architecture → 92% → maintainer approval</p>
+                <p>Architecture → 92 audit score → approval</p>
               </div>
               <div className="scenario-end">
                 <strong>$250</strong>
@@ -807,11 +931,15 @@ export function CommandCenter() {
             <span>{stage || "Updating the ledger…"}</span>
           </div>
         )}
-        <section className="ledger-panel" aria-labelledby="ledger-heading">
+        {studioVisited && <section hidden={workspaceView !== "studio"} aria-label="Studio analytics" className="studio-view">
+          <StudioWorkspace rows={rows} mode={mode} role={role} onInspect={inspectStudioBounty} onFilter={setStudioFilter} licenseKey={studioLicenseKey} />
+          {studioFilter && <button className="button studio-filter-link" onClick={() => { setView("all"); setSearch(""); navigate("ledger"); }}>View {studioFilter.length} matching bounties <ArrowRight size={16} /></button>}
+        </section>}
+        <section className="ledger-panel" aria-labelledby="ledger-heading" hidden={workspaceView === "studio"}>
           <div className="ledger-title-row">
             <div className="ledger-title">
               <h2 id="ledger-heading">Financial & agent ledger</h2>
-              <span className="record-count">{rows.length} bounties</span>
+              <span className="record-count">{rows.length} loaded</span>
             </div>
             <div className="ledger-tools">
               <span className="grid-brand">
@@ -827,6 +955,7 @@ export function CommandCenter() {
               </button>
             </div>
           </div>
+          {studioFilter && <div className="active-studio-filter" role="status"><span>Studio selection · {studioFilter.length} bounties</span><button className="button compact" onClick={() => setStudioFilter(null)}>Clear selection <X size={14} /></button></div>}
           <div className="ledger-toolbar">
             <div className="filter-tabs" aria-label="Filter bounties">
               {(
@@ -884,19 +1013,20 @@ export function CommandCenter() {
                 Create a task, define the proof, and fund its reward with PayPal
                 Sandbox.
               </p>
-              <button
+              {canManage && <button
                 className="button primary"
                 onClick={() => openModal({ kind: "create" })}
               >
                 <Plus size={16} />
                 Create bounty
-              </button>
+              </button>}
             </div>
           ) : (
             <LedgerGrid
               rows={filteredRows}
               search={search}
               busy={!!busy}
+              readOnly={!canManage}
               onInspect={inspect}
               onRelease={release}
               onReady={(api) => {
@@ -915,7 +1045,7 @@ export function CommandCenter() {
             </span>
           </div>
         </section>
-        <div className="bottom-grid">
+        <div className="bottom-grid" hidden={workspaceView !== "overview"}>
           <section className="activity-panel">
             <div className="section-heading">
               <h2>
@@ -981,7 +1111,7 @@ export function CommandCenter() {
               <div>
                 <dt>Default auto-release</dt>
                 <dd>
-                  ≥ 90% <span>and</span> ≤ $50
+                  ≥ 90/100 <span>and</span> ≤ $50
                 </dd>
               </div>
               <div>
@@ -1005,8 +1135,7 @@ export function CommandCenter() {
             Built for builders, wherever they build.
           </span>
           <span>
-            PayPal Sandbox <span>/</span> Custom AI <span>/</span> AG Grid
-            Community
+            PayPal Sandbox <span>/</span> Custom AI <span>/</span> AG Grid + Studio
           </span>
         </footer>
       </main>
@@ -1016,6 +1145,7 @@ export function CommandCenter() {
           row={inspected}
           demo={mode === "demo"}
           busy={!!busy}
+          readOnly={!canManage}
           onClose={() => setInspectId(null)}
           onFund={() => openModal({ kind: "fund", rowId: inspected.id })}
           onSubmit={() => openModal({ kind: "submit", rowId: inspected.id })}
@@ -1096,6 +1226,17 @@ export function CommandCenter() {
                 defaultValue="90"
               />
             </label>
+            <details className="evidence-policy-fields">
+              <summary>Require verified GitHub evidence</summary>
+              <p className="small muted">Set a repository and trusted CI check before funding. These requirements become immutable when the reward is funded.</p>
+              <label>Public repository<input name="repository" placeholder="owner/repository" pattern="[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+" maxLength={200} /></label>
+              <div className="form-columns">
+                <label>Target branch<input name="baseBranch" defaultValue="main" maxLength={200} /></label>
+                <label>Required CI check<input name="checkName" defaultValue="verify" maxLength={160} /></label>
+              </div>
+              <label>Trusted check publisher<input name="appSlug" defaultValue="github-actions" maxLength={100} /><span className="field-help">The GitHub App slug that publishes the required check</span></label>
+              <label>Workflow path (optional)<input name="workflowPath" placeholder=".github/workflows/ci.yml" maxLength={200} /></label>
+            </details>
             {formError}
             <div className="form-actions">
               <span>
@@ -1117,8 +1258,8 @@ export function CommandCenter() {
       )}
       {modal?.kind === "login" && (
         <Dialog
-          title="Unlock Sandbox Connected"
-          subtitle="Public judge demos never need credentials."
+          title={loginRole === "judge" ? "Judge access" : "Maintainer sign in"}
+          subtitle="Try the public demo freely, or sign in for live AI and sandbox data."
           onClose={() => !busy && setModal(null)}
         >
           <form
@@ -1126,22 +1267,28 @@ export function CommandCenter() {
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
-              void operate("Unlocking maintainer access", async () => {
-                await requestJson("/api/auth/login", {
+              void operate(`Signing in as ${loginRole}`, async () => {
+                ledgerEpoch.current++;
+                await requestJson(loginRole === "judge" ? "/api/auth/judge" : "/api/auth/login", {
                   password: String(data.get("password")),
                 });
                 setAuthenticated(true);
-                const [ledgerData, setup] = await Promise.all([
+                setRole(loginRole);
+                const [ledgerData, setup, analytics] = await Promise.all([
                   requestJson<{ rows: LedgerRow[] }>("/api/bounties"),
                   requestJson<{
                     paypalClientId: string | null;
                     missing: string[];
                   }>("/api/config"),
+                  requestJson<{ summary: AnalyticsSummary; asOf: string }>("/api/analytics?summary=1"),
                 ]);
                 setConfig(setup);
                 modeRef.current = "connected";
                 setMode("connected");
                 setRows(ledgerData.rows);
+                setServerSummary(analytics.summary);
+                setUpdatedAt(analytics.asOf);
+                setStudioFilter(null);
                 setModal(null);
                 setInspectId(null);
                 setView("all");
@@ -1149,26 +1296,29 @@ export function CommandCenter() {
               });
             }}
           >
+            <div className="login-role-switch" aria-label="Access level">
+              <button type="button" disabled={!!busy} aria-pressed={loginRole === "judge"} onClick={() => setLoginRole("judge")}>Judge</button>
+              <button type="button" disabled={!!busy} aria-pressed={loginRole === "maintainer"} onClick={() => setLoginRole("maintainer")}>Maintainer</button>
+            </div>
             <div className="callout">
               <LockKeyhole size={19} />
               <p>
-                Connected mode calls your custom LLM and PayPal Sandbox. Only
-                the maintainer can fund tasks or approve releases.
+                {loginRole === "judge" ? "Judge access lets you inspect sandbox evidence and try live analytics AI. Financial actions are disabled." : "Maintainer access can create and fund bounties, evaluate submissions, and approve PayPal Sandbox releases."}
               </p>
             </div>
             <label>
-              Maintainer password
+              {loginRole === "judge" ? "Judge access password" : "Maintainer password"}
               <input
+                key={loginRole}
                 name="password"
                 type="password"
                 required
                 autoComplete="current-password"
-                placeholder="Configured in your server environment"
+                placeholder={loginRole === "judge" ? "From the private judging instructions" : "Your maintainer password"}
               />
             </label>
             <p className="small muted">
-              Server setup: Neon connection, MAINTAINER_PASSWORD (16+
-              characters), and SESSION_SECRET (32+ characters).
+              {loginRole === "judge" ? "Use the password supplied with the project’s judging instructions." : "Your session expires after eight hours. Payments always remain in PayPal Sandbox."}
             </p>
             {formError}
             <button
@@ -1176,7 +1326,7 @@ export function CommandCenter() {
               disabled={!!busy}
               type="submit"
             >
-              {busy ? "Unlocking…" : "Unlock connected workspace"}
+              {busy ? "Signing in…" : loginRole === "judge" ? "Open judge workspace" : "Open maintainer workspace"}
               <ArrowRight size={16} />
             </button>
           </form>
@@ -1194,6 +1344,10 @@ export function CommandCenter() {
               void handleSubmit(event);
             }}
           >
+            <label>Evidence source<select name="sourceKind" defaultValue={modalRow.evidencePolicy ? "GITHUB_PR" : modalRow.submission?.sourceKind ?? "TEXT"}>
+              <option value="TEXT" disabled={!!modalRow.evidencePolicy}>Pasted text, diff, or Markdown</option><option value="GITHUB_PR">Public GitHub pull request</option>
+            </select></label>
+            <label>GitHub pull request URL<span className="field-help">Required for GitHub evidence. The server snapshots the commit and verifies the trusted checks.</span><input name="sourceUrl" type="url" maxLength={300} placeholder="https://github.com/owner/repository/pull/123" defaultValue={modalRow.submission?.sourceUrl ?? ""} /></label>
             <label>
               PayPal Sandbox receiver email
               <input
@@ -1205,11 +1359,11 @@ export function CommandCenter() {
                 placeholder="contributor@your-sandbox-account.com"
               />
             </label>
+            <label>Contributor country (optional)<input name="contributorCountry" maxLength={2} minLength={2} pattern="[A-Za-z]{2}" placeholder="ID" defaultValue={modalRow.submission?.contributorCountry ?? ""} /><span className="field-help">Two-letter country code, self-reported by the contributor</span></label>
             <label>
               Deliverable evidence
               <span className="field-help">
-                Paste a code diff, Markdown, tests, or structured text. A link
-                alone cannot be verified.
+                Paste implementation, tests, and verification notes. For GitHub, explain how the PR meets the acceptance criteria.
               </span>
               <textarea
                 name="deliverable"
@@ -1376,7 +1530,7 @@ export function CommandCenter() {
               <p>
                 <span>AI verification</span>
                 <strong>
-                  {modalRow.audit?.verdict?.score}% / all criteria passed
+                  {modalRow.audit?.verdict?.score}/100 · all criteria passed
                 </strong>
               </p>
               <p>
@@ -1469,8 +1623,8 @@ export function CommandCenter() {
               <div>
                 <h3>Evaluate and challenge</h3>
                 <p>
-                  Your custom OpenAI-compatible model evaluates pasted evidence,
-                  then performs an adversarial review. Every criterion needs
+                  GitHub evidence is tied to a commit and trusted CI checks.
+                  Your custom model evaluates the evidence, then challenges its verdict. Every criterion needs
                   proof. Failed or invalid audits block payments.
                 </p>
               </div>
@@ -1480,7 +1634,7 @@ export function CommandCenter() {
               <div>
                 <h3>Apply the release policy</h3>
                 <p>
-                  Approved work at ≥ 90% and ≤ $50 releases automatically by
+                  Approved work with a score ≥ 90/100 and reward ≤ $50 releases automatically by
                   default. Other approved work requires a maintainer click.
                   PayPal item-level success is required before showing settled.
                 </p>
@@ -1491,7 +1645,7 @@ export function CommandCenter() {
               <div>
                 <h3>Keep an honest ledger</h3>
                 <p>
-                  AG Grid exposes audits, scores, policy decisions, and
+                  AG Grid and Studio connect audits, dashboards, policy decisions, and
                   receipts. Demo presets and payout-permission fallbacks are
                   labeled simulations and never counted as real payouts.
                 </p>
@@ -1499,8 +1653,7 @@ export function CommandCenter() {
             </section>
           </div>
           <p className="small muted">
-            M1 evaluates supplied text evidence. It does not execute code,
-            browse submission links, or provide regulated escrow.
+            Evidence comes from pasted text or a public GitHub PR snapshot. Contributor code is never executed by BountyGuard. Funding is a ledger reservation against a sandbox merchant capture.
           </p>
         </Dialog>
       )}

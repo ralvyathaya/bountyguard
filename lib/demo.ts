@@ -186,6 +186,7 @@ export function releaseDemo(
     ],
   };
 }
+const demoCountries: Record<string,string> = {Indonesia:"ID",Brazil:"BR",Nigeria:"NG",Vietnam:"VN",Portugal:"PT",Colombia:"CO",Egypt:"EG",Japan:"JP"};
 export function createDemoRows(): LedgerRow[] {
   const rows: LedgerRow[] = demoTemplates.map((item) => ({
     id: item.id,
@@ -199,6 +200,8 @@ export function createDemoRows(): LedgerRow[] {
       id: `demo-submission-${item.id}`,
       receiverEmail: item.email,
       createdAt: baseTime,
+      sourceKind: "TEXT",
+      contributorCountry: demoCountries[item.country],
       deliverable: `Demo deliverable from ${item.country}.\n\nImplementation: the patch fixes the requested behavior.\nTests: regression coverage includes successful and failed requests.\nDocumentation: setup, verification, and limitations are included.\n\nThis is seeded judge evidence, not a verified repository.`,
     },
     funding: {
@@ -223,5 +226,14 @@ export function createDemoRows(): LedgerRow[] {
   rows[5] = completeDemoAudit(rows[5], 94, false, 5100);
   rows[6] = completeDemoAudit(rows[6], 58, true, 3900);
   rows[7] = { ...rows[7], submission: null };
+  const archive = Array.from({length:40},(_,index):LedgerRow=>{
+    const template=rows[index%rows.length],id=`BG-${900+index}`;
+    const createdAt=new Date(Date.parse(baseTime)-(index+1)*86400000).toISOString();
+    const row:LedgerRow={...template,id,title:`${template.title} · milestone ${index+1}`,createdAt,audit:null,payout:null,submission:template.submission?{...template.submission,id:`demo-submission-${id}`,createdAt}:null,funding:{status:"COMPLETED",orderId:`SIM-ORDER-${id}`,captureId:`SIM-CAPTURE-${id}`,amountCents:template.rewardCents},events:[{id:`seed-${id}`,type:"DEMO_FUNDED",message:"Historical demo fixture. Funding and settlement are simulated.",createdAt}]};
+    if(!row.submission)return row;
+    const result=completeDemoAudit(row,index%5===0?62:93+index%7,index%5===0,2400+index*90);
+    return {...result,audit:result.audit?{...result.audit,completedAt:createdAt}:null,events:result.events.map((event,eventIndex)=>({...event,id:`${id}-event-${eventIndex}`,createdAt}))};
+  });
+  rows.push(...archive);
   return rows;
 }

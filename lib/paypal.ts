@@ -255,6 +255,51 @@ export async function captureOrder(
   return verifyCapture(body, { ...expected, orderId });
 }
 
+export async function getOrder(orderId: string) {
+  return request(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
+}
+
+export async function getCapture(captureId: string) {
+  return request(`/v2/payments/captures/${encodeURIComponent(captureId)}`);
+}
+
+export async function getVerifiedCapture(
+  orderId: string,
+  expected: { bountyId: string; amountCents: number; captureId?: string | null },
+) {
+  const verified = verifyCapture(await getOrder(orderId), { ...expected, orderId });
+  if (expected.captureId && verified.captureId !== expected.captureId)
+    throw new AppError(409, "The funding capture changed. Inspect funding before releasing rewards.", "FUNDING_HOLD");
+  const capture = await getCapture(verified.captureId);
+  const amount = capture.amount as { currency_code?: string; value?: string } | undefined;
+  if (capture.id !== verified.captureId || capture.status !== "COMPLETED" || amount?.currency_code !== "USD" || amount.value !== paypalAmount(expected.amountCents))
+    throw new AppError(409, "Funding is no longer a completed matching USD capture. Reward release is on hold.", "FUNDING_HOLD");
+  return verified;
+}
+
+export async function verifyWebhookSignature(headers: Headers, webhookEvent: unknown) {
+  const webhookId = requiredEnv("PAYPAL_WEBHOOK_ID");
+  const authAlgo = headers.get("paypal-auth-algo");
+  const certUrl = headers.get("paypal-cert-url");
+  const transmissionId = headers.get("paypal-transmission-id");
+  const transmissionSig = headers.get("paypal-transmission-sig");
+  const transmissionTime = headers.get("paypal-transmission-time");
+  let certificateAllowed = false;
+  try {
+    const url = new URL(certUrl ?? "");
+    certificateAllowed = url.protocol === "https:" && ["api.paypal.com", "api.sandbox.paypal.com", "api-m.sandbox.paypal.com"].includes(url.hostname) && /^\/v1\/notifications\/certs\/[a-zA-Z0-9_-]+$/.test(url.pathname) && !url.search && !url.hash && !url.username && !url.password;
+  } catch { /* Invalid certificate locations never reach the verification service. */ }
+  if (authAlgo !== "SHA256withRSA" || !certificateAllowed || !transmissionId || transmissionId.length > 200 || !transmissionSig || transmissionSig.length > 4096 || !transmissionTime || !Number.isFinite(Date.parse(transmissionTime)))
+    throw new AppError(401, "PayPal webhook signature headers are missing or invalid.", "INVALID_WEBHOOK_SIGNATURE");
+  const result = await request("/v1/notifications/verify-webhook-signature", { method: "POST", body: {
+    auth_algo: authAlgo, cert_url: certUrl, transmission_id: transmissionId,
+    transmission_sig: transmissionSig, transmission_time: transmissionTime,
+    webhook_id: webhookId, webhook_event: webhookEvent,
+  } });
+  if (result.verification_status !== "SUCCESS")
+    throw new AppError(401, "PayPal webhook signature verification failed.", "INVALID_WEBHOOK_SIGNATURE");
+}
+
 export function payoutPermissionDenied(error: unknown) {
   return (
     error instanceof PayPalError &&

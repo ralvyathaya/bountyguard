@@ -27,6 +27,18 @@ The inspector shows per-criterion evidence, both audit steps, policy decisions, 
 
 Demo fixtures and localStorage are isolated from the connected database. Demo scores are deterministic, not responses from an LLM. All demo and permission-fallback receipts are labeled **Simulated** and use `SIM-` transaction IDs.
 
+## Evidence-to-Payout Studio
+
+The white command center has Overview, Bounty Ledger, and Studio views. AG Studio 3.1 provides three report pages, cross-filtering, editable layouts, undo/redo, and browser/workspace report persistence. Its Decision Path, Policy What-if, and Settlement Proof widgets use the same source facts as the financial ledger. The standalone operational grid remains AG Grid Community.
+
+The BountyGuard coordinator uses Studio's native harness and delegates to its built-in agents. A protected server adapter translates validated JSON text from the configured Chat Completions endpoint into Studio tool events. It needs no Responses API or native provider tools. Analytics tools can query, create widgets, simulate policy, and open evidence; they cannot authorize a payment.
+
+Public demo chat is scripted and clearly labelled. **Judge access** uses a separate `JUDGE_PASSWORD` (at least 16 characters) for real model requests and redacted financial reads. Judge sessions cannot create bounties, submit/audit work, fund/release/sync payments, or overwrite the maintainer's workspace report. Keep the judge password in private submission testing instructions. Existing sessions require a fresh login after the role-aware cookie upgrade.
+
+Optional `AG_STUDIO_LICENSE_KEY` is passed to the browser's Studio provider for trial/judging use. AG Studio retains its commercial licence; it is not included in the project's MIT source-code licence. Sponsor integration references: [boilerplate](https://github.com/paypaldev/hackathon-paypal-ag-grid-boilerplate), [runner contract](https://www.ag-grid.com/studio/react/ai-client-tool-runner/).
+
+See [judge guide](docs/judge-guide.md), [English recording script](docs/demo-script.md), and [submission draft](docs/submission.md).
+
 ## Configure Sandbox Connected
 
 1. Copy `.env.example` to `.env.local` and supply actual server credentials. Never commit `.env.local`.
@@ -74,6 +86,10 @@ type AuditVerdict = {
 
 M1 evaluates **pasted text evidence**: code diffs, Markdown, tests, and structured descriptions. It does not run submitted code or fetch arbitrary URLs. A link alone cannot substantiate an acceptance criterion. Evidence summaries are persisted; private model chain-of-thought is not requested.
 
+M2 also supports **public GitHub PR evidence**. Before funding, configure the repository, base branch, required check names/publisher, and optional workflow path. The server snapshots the diff, exact head SHA, check identities/results, and fingerprint. It rechecks that snapshot before release. Pending/failed checks, changed commits, changed workflows, or truncated evidence block eligibility. Optional `GITHUB_TOKEN` increases GitHub public-API rate limits; use a read-only token. Contributor country is optional ISO alpha-2 metadata and always self-reported. No submitted code is executed.
+
+Live Studio AI is bounded to 20 model calls per run, 4,096 response tokens per call, 25-second provider timeout, and one JSON repair per run. Judge access additionally permits 30 calls/session/hour and 200/workspace/day. Provider failures do not silently become scripted answers.
+
 ### PayPal Sandbox
 
 Set `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` from a PayPal developer **Sandbox business app**, with:
@@ -95,11 +111,12 @@ Any other PayPal host is rejected. Use a separate sandbox buyer account to appro
 
 ## API
 
-All connected endpoints require a signed maintainer cookie. POST requests also require a same-origin `Origin` header. The shared-password session lasts 8 hours and uses HttpOnly / SameSite=Strict / Secure cookies in production. Login attempts use a database-backed global 10-attempt bucket per 15 minutes.
+Connected read endpoints require a signed maintainer or judge cookie. Financial mutations require the maintainer role. Browser mutations also require a same-origin `Origin` header. The shared-password session lasts 8 hours and uses HttpOnly / SameSite=Strict / Secure cookies in production. Login attempts use a database-backed 10-attempt bucket per role per 15 minutes. The PayPal webhook uses provider signature verification instead of a browser session or Origin check.
 
 | Method | Route                                  | Body / behavior                                                                               |
 | ------ | -------------------------------------- | --------------------------------------------------------------------------------------------- |
 | POST   | `/api/auth/login`                      | `{ password }`                                                                                |
+| POST   | `/api/auth/judge`                      | `{ password }`; financial read-only role                                                       |
 | POST   | `/api/auth/logout`                     | Clears session                                                                                |
 | GET    | `/api/auth/session`                    | Authentication status only                                                                    |
 | GET    | `/api/config`                          | Client ID and missing setting names, never secrets                                            |
@@ -111,10 +128,19 @@ All connected endpoints require a signed maintainer cookie. POST requests also r
 | POST   | `/api/paypal/orders/[orderId]/capture` | Verifies capture and records funding                                                          |
 | POST   | `/api/paypal/payout`                   | `{ bountyId, submissionId }`; explicit maintainer approval                                    |
 | POST   | `/api/paypal/payout/[id]/sync`         | Reconciles the existing provider operation                                                    |
+| POST   | `/api/paypal/webhook`                  | Signed provider event; reads authoritative capture/payout state                                |
+| GET    | `/api/analytics`                      | Default 90-day bounty creation cohort; `summary=1` returns all-history overview                  |
+| POST   | `/api/studio/turn`                     | Authenticated, session-owned model turn; NDJSON tool/text events                                |
+| GET/PUT| `/api/studio/report`                   | Load workspace layout; maintainer save with optimistic `version`                               |
+| GET    | `/api/receipts/[bountyId]`             | Role-redacted provider-linked audit packet download                                            |
 
 Reward amounts, recipients, audits, thresholds, and settlement modes are reloaded from the database. Client-supplied payment amounts are rejected. Requests are limited to 128 KiB; deliverables to 80,000 characters. All connected responses use `Cache-Control: no-store`.
 
 Money uses integer USD cents, then decimal strings at the PayPal boundary. Timestamps are stored in UTC and rendered in the viewer's local timezone. The ledger is a read-only financial view; immutable audit and financial records cannot be edited inline.
+
+The operational ledger loads the latest 500 bounties; Studio can drill through to older records by ID. Overview summaries aggregate the full database. Studio datasets include history for bounties created in the selected range, capped at 5,000 rows per source with an explicit narrower-range error. Monetary facts belong to one bounty/operation; criterion joins do not multiply payments. Gross funding includes verified historical captures; currently held/refunded funding is never release-eligible.
+
+Register `https://your-deployment/api/paypal/webhook` with the same Sandbox app and set `PAYPAL_WEBHOOK_ID`. Subscribe to capture completion and relevant payout batch/item events. Signature verification precedes database writes; duplicates are deduplicated and transient reconciliation failures return retryable errors. Reconciliation only retrieves provider objects and never creates a capture or payout. A changed capture places funding on hold. No refund-sending UI/API is provided.
 
 ## Verification
 
@@ -127,7 +153,7 @@ npm start
 
 The Node test runner covers threshold boundaries, stale submissions/recipients, strict audit validation, custom endpoint calls, conservative aggregation, prompt-injection risk handling, bounded repair/retries, auth/Origin checks, capture mismatches, payout fallbacks, pending/success distinctions, money, CSV formula injection, and all three judge paths. Network calls are mocked in these tests.
 
-The Neon concurrency test is explicitly skipped without `TEST_DATABASE_URL`. To run it, use a **dedicated disposable Neon test database**, migrate it with its direct URL, and export its runtime URL as `TEST_DATABASE_URL` before running `npm test`. It creates/deletes only its own test bounty and mocks PayPal; no external payment is sent. Do not point it at a shared production database.
+Neon integration tests are explicitly skipped without `TEST_DATABASE_URL`. To run them, use a **dedicated disposable Neon test database**, migrate it with its direct URL, and export its runtime URL as `TEST_DATABASE_URL` before running `npm test`. They cover concurrent release, more-than-500-bounty summaries, report-save conflicts, and authenticated Studio tool-result/session isolation. They create/delete their own fixtures and mock provider calls; no external payment is sent. Do not point them at a shared production database.
 
 GitHub Actions runs typecheck, tests, and build on pushes to `main` and pull requests, without credentials.
 
@@ -139,7 +165,9 @@ GitHub Actions runs typecheck, tests, and build on pushes to `main` and pull req
 4. Apply `npm run db:migrate` explicitly against the intended Neon database **before** enabling connected mode. Do not run migrations or seed payments during `next build`.
 5. Deploy, then verify the public presets and the protected connected flow using sandbox accounts. Keep Fluid Compute enabled for the 120-second audit route.
 
-No live money, Invoicing, multi-user identity system, webhooks, arbitrary URL retrieval, or repository execution is included in M1. Without webhooks/background workers, the payment provider continues processing a submitted payout, while the application's stored status catches up when the dashboard or sync endpoint is used.
+M2 uses Sandbox money only. Invoicing, a multi-user marketplace, arbitrary URL retrieval, and repository execution are outside scope. Verified webhooks reconcile provider status while the dashboard is closed; visible-tab refresh and explicit sync provide additional reconciliation.
+
+See [the M2 verification record](docs/verification.md) for completed checks and the remaining owner-operated Sandbox payment test.
 
 ## Source map
 
