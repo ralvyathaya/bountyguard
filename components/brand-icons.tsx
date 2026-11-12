@@ -7,7 +7,8 @@ export interface BrandIconProps {
 
 /**
  * Official PayPal Monogram (Double "P")
- * Uses official PayPal Blue (#003087) and Cyan Blue (#0079C1) with overlap shading.
+ * Sourced from https://www.svgrepo.com/svg/303385/paypal-icon-logo
+ * ViewBox 0 0 384.971 384.971
  */
 export function PayPalIcon({
   size = 16,
@@ -20,13 +21,12 @@ export function PayPalIcon({
 
   const backColor = isMono ? "currentColor" : isLight ? "#38bdf8" : "#003087";
   const frontColor = isMono ? "currentColor" : isLight ? "#ffffff" : "#0079C1";
-  const overlapColor = isMono ? "currentColor" : isLight ? "#0284c7" : "#00457C";
 
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 24 24"
+      viewBox="0 0 384.971 384.971"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
@@ -35,19 +35,13 @@ export function PayPalIcon({
     >
       {/* Back P */}
       <path
-        d="M6.9 21.2H3.1a.6.6 0 0 1-.6-.7L5.5 3.7a.8.8 0 0 1 .8-.7h6.6c2.6 0 4.6.6 5.5 1.7.9 1 1.2 2.4.8 4-.8 3.6-3.2 5.5-7.2 5.5H9.4L8.3 20.6a.6.6 0 0 1-.6.6z"
+        d="M362.485,50.781C341.258,19.347,301.996,0,244.629,0H71.865C53.303,0,38.169,14.86,37.387,33.374L1.758,296.883c-1.127,8.423,5.291,15.892,13.784,15.892h74.966c8.535,0,15.981-6.529,17.079-15.025l18.435-142.147c1.378-10.635,10.364-18.665,21.096-18.665h26.471c69.184,0,123.366-28.093,138.834-100.082C355.204,91.879,368.149,69.57,362.485,50.781z"
         fill={backColor}
       />
       {/* Front P */}
       <path
-        d="M19.7 8.6c-.8 3.6-3.2 5.5-7.2 5.5H9.8l-1.3 8.3a.6.6 0 0 1-.6.6H4.7a.4.4 0 0 1-.4-.5l.4-2.3 1.1-6.8h2.5c4 0 6.4-2 7.2-5.5.3-1.6 0-3-.8-4 2.1.4 3.7 1.9 4.2 4.9z"
+        d="M312.446,128.847c-13.684,59.397-64.846,90.957-135.088,90.957h-33.003c-10.732,0-19.718,8.03-21.096,18.665l-19.539,150.672c-1.1,8.496,5.345,15.025,13.881,15.025h65.852c8.535,0,15.981-6.529,17.079-15.025l3.871-29.872c1.1-8.496,8.535-15.025,17.079-15.025h12.593c61.428,0,109.529-24.939,123.27-88.859c6.452-29.839,3.582-53.774-8.775-71.18C328.055,107.039,319.467,117.165,312.446,128.847z"
         fill={frontColor}
-      />
-      {/* Overlapping intersection */}
-      <path
-        d="M18 8.6c-.7 3.2-2.8 4.9-6.3 4.9H9.2l1.4-8.7h2c2.3 0 4 .5 4.8 1.5.6.7.8 1.7.5 2.3z"
-        fill={overlapColor}
-        opacity={isMono ? 0.35 : 0.75}
       />
     </svg>
   );
