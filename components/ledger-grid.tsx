@@ -33,7 +33,7 @@ const gridTheme = themeQuartz.withParams({
   fontSize: 13,
   headerFontSize: 12,
   headerFontWeight: 500,
-  spacing: 7,
+  spacing: 8,
   wrapperBorderRadius: 0,
   rowHoverColor: "var(--color-hover)",
   selectedRowBackgroundColor: "var(--color-accent-soft)",

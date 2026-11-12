@@ -94,7 +94,7 @@ export function AuditInspector({
         </ol>
       </section>
       {row.submission && <section className="inspector-section">
-        <h3><GitPullRequest size={17} />Evidence source</h3>
+        <h3><GitPullRequest size={16} />Evidence source</h3>
         <p className="small muted">{demo ? "Judge fixture · simulated evaluation" : row.submission.sourceKind === "GITHUB_PR" ? "GitHub pull request · immutable evidence snapshot" : "Pasted evidence · supplied by contributor"}</p>
         {githubUrl && <a className="button compact packet-download" href={githubUrl} target="_blank" rel="noreferrer">Open pull request <ArrowUpRight size={14} /></a>}
         {evidence && <>
@@ -106,7 +106,7 @@ export function AuditInspector({
       </section>}
       <section className="inspector-section">
         <h3>
-          <ShieldCheck size={17} />
+          <ShieldCheck size={16} />
           Agent verdict
         </h3>
         {verdict ? (

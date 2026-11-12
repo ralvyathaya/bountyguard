@@ -32,7 +32,6 @@ import {
   ShieldCheck,
   ShieldX,
   SlidersHorizontal,
-  Sparkles,
   Workflow,
   X,
   Zap,
@@ -730,7 +729,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
                 disabled={!!busy}
                 onClick={enterDemo}
               >
-                <Sparkles size={14} />
+                <SlidersHorizontal size={13} strokeWidth={1.8} />
                 Judge demo
               </button>
               <button
