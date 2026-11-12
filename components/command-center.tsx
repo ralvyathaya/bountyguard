@@ -61,7 +61,7 @@ import {
 import { LedgerGrid } from "./ledger-grid";
 import { AuditInspector } from "./audit-inspector";
 import { Dialog } from "./dialog";
-import { PayPalIcon, GitHubIcon, AgGridIcon } from "./brand-icons";
+import { GardaIcon, PayPalIcon, GitHubIcon, AgGridIcon } from "./brand-icons";
 
 const StudioWorkspace = dynamic(
   () => import("./studio-workspace").then((module) => module.StudioWorkspace),
@@ -649,7 +649,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
         <div className="topbar-inner">
           <a href="/" className="wordmark" aria-label="Garda home">
             <span className="brand-mark">
-              <PayPalIcon size={21} variant="light" />
+              <GardaIcon size={21} />
             </span>
             Garda
           </a>

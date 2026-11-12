@@ -6,6 +6,54 @@ export interface BrandIconProps {
 }
 
 /**
+ * Garda Sovereign Brand Mark
+ * Cyber shield enclosing a stylized 'G' and verified checkmark.
+ * Represents code verification, bounty protection, and reward release.
+ */
+export function GardaIcon({
+  size = 20,
+  className = "",
+}: BrandIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0 }}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="gardaGrad" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#38BDF8" />
+          <stop offset="45%" stopColor="#0079C1" />
+          <stop offset="100%" stopColor="#003087" />
+        </linearGradient>
+        <linearGradient id="gardaCheckGrad" x1="13" y1="13" x2="23" y2="19" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#7DD3FC" />
+        </linearGradient>
+      </defs>
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M16 2C21.8 4.4 25.8 6.2 27.5 7C27.5 17.2 23.5 24.8 16 30C8.5 24.8 4.5 17.2 4.5 7C6.2 6.2 10.2 4.4 16 2ZM16 6.8C11.5 8.5 9 10.8 9 16C9 21.8 12.2 24.5 16 26C19.8 24.5 23 21.8 23 16V13.5H15V17H19.5C19 19.8 17.8 21.8 16 22.8C14.2 21.8 12.8 19.5 12.5 16C12.5 12.2 14 10 16 8.5C17.5 9.8 19.2 10.5 20.8 11.2L22.5 8C20.5 7 18.2 6.2 16 6.8Z"
+        fill="url(#gardaGrad)"
+      />
+      <path
+        d="M15 13.5L17 15.5L21.5 11"
+        stroke="url(#gardaCheckGrad)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
  * Authentic PayPal Monogram (Double "P")
  * Vector geometry from official PayPal Brand Assets (Adobe Illustrator / paypalobjects.com)
  * ViewBox: 0 0 24.5 30
