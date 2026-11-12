@@ -17,7 +17,6 @@ import {
   ArrowUpRight,
   Check,
   CheckCheck,
-  ChevronDown,
   CircleHelp,
   Code2,
   ExternalLink,
@@ -654,10 +653,6 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
             </span>
             Garda
           </a>
-          <span className="nav-divider" />
-          <span className="workspace-label">
-            Workspace <ChevronDown size={13} />
-          </span>
           <nav className="top-nav" aria-label="Main navigation">
             {(["overview", "ledger", "studio"] as WorkspaceView[]).map((key) => (
               <button key={key} className={workspaceView === key ? "nav-active" : ""} aria-current={workspaceView === key ? "page" : undefined} onClick={() => navigate(key)}>
