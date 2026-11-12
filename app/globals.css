@@ -686,6 +686,9 @@ h1 {
 .grid-brand {
   color: var(--color-muted);
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .grid-brand strong {
   font-weight: 500;
@@ -1061,9 +1064,21 @@ h1 {
   gap: 8px;
   align-items: center;
 }
-.page-footer > span > span {
-  color: var(--color-rule-2);
-  margin: 0 2px;
+.footer-tech-stack {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tech-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-ink-2);
+  font-weight: 500;
+}
+.footer-dot {
+  color: var(--color-muted-2);
 }
 .dialog {
   border: 1px solid var(--color-rule-2);
@@ -1431,6 +1446,9 @@ h1 {
   padding-top: 4px;
 }
 .guide-steps h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 15px;
   font-weight: 500;
   margin-bottom: 8px;

@@ -407,3 +407,309 @@
     display: none;
   }
 }
+
+/* -------------------------------------------------------------
+   AG Studio AI Chat Assistant — Modern ChatGPT / Claude Styling
+   ------------------------------------------------------------- */
+.ag-studio-ai-assistant-panel {
+  background: #ffffff !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+}
+
+/* Thread Header & Switcher */
+.ag-studio-ai-thread-control {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 10px 14px !important;
+  border-bottom: 1px solid var(--color-rule) !important;
+  background: #f8fafc !important;
+  font-size: 12.5px !important;
+}
+.ag-studio-ai-thread-button {
+  font-weight: 500 !important;
+  color: #1e293b !important;
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  border: 1px solid transparent !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease !important;
+}
+.ag-studio-ai-thread-button:hover {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+.ag-studio-ai-thread-new-button {
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  color: #0070ba !important;
+  font-weight: 500 !important;
+  transition: background-color 0.15s ease !important;
+}
+.ag-studio-ai-thread-new-button:hover {
+  background: rgba(0, 112, 186, 0.08) !important;
+}
+
+/* Message Thread Container */
+.ag-studio-ai-thread,
+.ag-studio-ai-message-list {
+  padding: 16px 14px !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+/* User Message: Modern Pill Bubble (Claude / ChatGPT style) */
+.ag-studio-ai-input-message {
+  align-self: flex-end !important;
+  max-width: 86% !important;
+  background: #f4f4f5 !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 20px 20px 4px 20px !important;
+  padding: 10px 16px !important;
+  margin-bottom: 8px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+.ag-studio-ai-input-message-content {
+  color: #18181b !important;
+  font-family: var(--font-body) !important;
+  font-size: 13.5px !important;
+  line-height: 1.55 !important;
+  font-weight: 450 !important;
+}
+
+/* Assistant Response: Elegant Markdown Layout */
+.ag-studio-ai-output-message {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 4px 0 16px !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+  margin-bottom: 8px !important;
+}
+.ag-studio-ai-output-message:last-child {
+  border-bottom: none !important;
+}
+.ag-studio-ai-output-message-content {
+  color: #0f172a !important;
+  font-family: var(--font-body) !important;
+  font-size: 13.5px !important;
+  line-height: 1.65 !important;
+}
+.ag-studio-ai-output-message-content p {
+  margin: 0 0 10px 0 !important;
+}
+.ag-studio-ai-output-message-content p:last-child {
+  margin-bottom: 0 !important;
+}
+.ag-studio-ai-output-message-content ul,
+.ag-studio-ai-output-message-content ol {
+  margin: 4px 0 10px 0 !important;
+  padding-left: 20px !important;
+}
+.ag-studio-ai-output-message-content li {
+  margin-bottom: 4px !important;
+}
+.ag-studio-ai-output-message-content code {
+  font-family: var(--font-measured) !important;
+  font-size: 12px !important;
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 4px !important;
+  padding: 2px 5px !important;
+  color: #0f172a !important;
+}
+.ag-studio-ai-output-message-content pre {
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border-radius: 8px !important;
+  padding: 12px 14px !important;
+  overflow-x: auto !important;
+  margin: 8px 0 12px 0 !important;
+}
+.ag-studio-ai-output-message-content pre code {
+  background: transparent !important;
+  border: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+}
+
+/* Thinking & Tool Execution Rails (Claude 3.7 style) */
+.ag-studio-ai-step-row {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  padding: 8px 12px !important;
+  margin: 6px 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+.ag-studio-ai-step-row:hover {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+.ag-studio-ai-step-marker {
+  background: #0070ba !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 3px rgba(0, 112, 186, 0.15) !important;
+}
+.ag-studio-ai-step-words {
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+}
+.ag-studio-ai-step-text {
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: #334155 !important;
+}
+.ag-studio-ai-step-subline {
+  font-size: 11px !important;
+  color: #64748b !important;
+}
+.ag-studio-ai-step-pill {
+  background: rgba(0, 112, 186, 0.08) !important;
+  color: #0070ba !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 2px 8px !important;
+  border-radius: 99px !important;
+}
+.ag-studio-ai-step-body {
+  border-left: 2px solid #e2e8f0 !important;
+  margin-left: 12px !important;
+  padding-left: 12px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  font-size: 12px !important;
+  color: #64748b !important;
+}
+
+/* Prompt Starters: ChatGPT-style Suggestion Cards */
+.ag-studio-ai-prompt-starters {
+  padding: 12px 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+.ag-studio-ai-prompt-starter {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  padding: 10px 14px !important;
+  font-size: 12.5px !important;
+  color: #334155 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  transition: all 0.15s ease !important;
+}
+.ag-studio-ai-prompt-starter:hover {
+  background: #f8fafc !important;
+  border-color: #0070ba !important;
+  color: #0070ba !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 3px 8px rgba(0, 112, 186, 0.08) !important;
+}
+.ag-studio-ai-prompt-starter-label {
+  font-weight: 500 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Input Area: Floating Rounded Pill Box */
+.ag-studio-ai-assistant-controls {
+  border-top: 1px solid #e2e8f0 !important;
+  padding: 12px 14px !important;
+  background: #ffffff !important;
+}
+.ag-studio-ai-assistant-input {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 20px !important;
+  padding: 8px 10px 8px 14px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+.ag-studio-ai-assistant-input:focus-within {
+  border-color: #0070ba !important;
+  box-shadow: 0 0 0 3px rgba(0, 112, 186, 0.12), 0 2px 10px rgba(0, 0, 0, 0.06) !important;
+}
+.ag-studio-ai-assistant-textarea {
+  font-family: var(--font-body) !important;
+  font-size: 13.5px !important;
+  line-height: 1.5 !important;
+  color: #0f172a !important;
+  padding: 4px 0 !important;
+  resize: none !important;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+}
+.ag-studio-ai-assistant-textarea::placeholder {
+  color: #94a3b8 !important;
+}
+.ag-studio-ai-assistant-input-controls {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-top: 4px !important;
+}
+.ag-studio-ai-assistant-selectors {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+.ag-studio-ai-option-selector {
+  border-radius: 99px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  color: #64748b !important;
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  padding: 3px 10px !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+.ag-studio-ai-option-selector:hover {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+.ag-studio-ai-assistant-send-button {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  border-radius: 50% !important;
+  background: #0070ba !important;
+  color: #ffffff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: background-color 0.15s ease, transform 0.1s ease !important;
+  box-shadow: 0 2px 4px rgba(0, 112, 186, 0.25) !important;
+}
+.ag-studio-ai-assistant-send-button:hover:not(:disabled) {
+  background: #005ea6 !important;
+  transform: scale(1.05) !important;
+}
+.ag-studio-ai-assistant-send-button:disabled {
+  background: #e2e8f0 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+}

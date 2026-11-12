@@ -15,6 +15,7 @@ import { Dialog } from "./dialog";
 import { StatusBadge } from "./ledger-grid";
 import type { LedgerRow } from "@/lib/types";
 import { rowRelease, rowStatus, usd } from "@/lib/policy";
+import { GitHubIcon, PayPalIcon } from "./brand-icons";
 
 export function AuditInspector({
   row,
@@ -96,7 +97,7 @@ export function AuditInspector({
       {row.submission && <section className="inspector-section">
         <h3><GitPullRequest size={16} />Evidence source</h3>
         <p className="small muted">{demo ? "Judge fixture · simulated evaluation" : row.submission.sourceKind === "GITHUB_PR" ? "GitHub pull request · immutable evidence snapshot" : "Pasted evidence · supplied by contributor"}</p>
-        {githubUrl && <a className="button compact packet-download" href={githubUrl} target="_blank" rel="noreferrer">Open pull request <ArrowUpRight size={14} /></a>}
+        {githubUrl && <a className="button compact packet-download" href={githubUrl} target="_blank" rel="noreferrer"><GitHubIcon size={14} /> Open pull request <ArrowUpRight size={14} /></a>}
         {evidence && <>
           <dl className="evidence-facts"><dt>Repository</dt><dd>{evidence.repository} #{evidence.prNumber}</dd><dt>Head commit</dt><dd className="measured">{evidence.headSha}</dd><dt>Target branch</dt><dd>{evidence.baseBranch}</dd><dt>Collected</dt><dd>{new Date(evidence.collectedAt).toLocaleString()}</dd><dt>Fingerprint</dt><dd className="measured">{evidence.fingerprint}</dd></dl>
           <StatusBadge status={evidence.eligible ? "APPROVED" : "BLOCKED"} />
@@ -240,6 +241,7 @@ export function AuditInspector({
       {row.payout && (
         <section className="inspector-section">
           <h3>
+            <PayPalIcon size={16} />
             Settlement receipt
             <button
               className="icon-button"

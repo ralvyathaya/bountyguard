@@ -61,6 +61,7 @@ import {
 import { LedgerGrid } from "./ledger-grid";
 import { AuditInspector } from "./audit-inspector";
 import { Dialog } from "./dialog";
+import { PayPalIcon, GitHubIcon, AgGridIcon } from "./brand-icons";
 
 const StudioWorkspace = dynamic(
   () => import("./studio-workspace").then((module) => module.StudioWorkspace),
@@ -669,7 +670,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
           <div className="topbar-right">
             {!authenticated && <button className="button compact judge-access" onClick={() => { setLoginRole("judge"); openModal({ kind: "login" }); }}>Judge access</button>}
             <span className="sandbox-label">
-              <ShieldCheck size={13} />
+              <PayPalIcon size={14} variant="light" />
               Sandbox only
             </span>
             <a
@@ -679,7 +680,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
               className="icon-button"
               aria-label="View source on GitHub"
             >
-              <Code2 size={19} />
+              <GitHubIcon size={16} />
             </a>
             <button
               className="avatar"
@@ -942,7 +943,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
             </div>
             <div className="ledger-tools">
               <span className="grid-brand">
-                Powered by <strong>AG Grid</strong>
+                Powered by <AgGridIcon size={14} /> <strong>AG Grid</strong>
               </span>
               <button
                 className="button compact"
@@ -1133,8 +1134,12 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
             <Globe2 size={14} />
             Built for builders, wherever they build.
           </span>
-          <span>
-            PayPal Sandbox <span>/</span> Custom AI <span>/</span> AG Grid + Studio
+          <span className="footer-tech-stack">
+            <span className="tech-badge"><PayPalIcon size={13} /> PayPal Sandbox</span>
+            <span className="footer-dot">·</span>
+            <span className="tech-badge"><AgGridIcon size={13} /> AG Grid + Studio</span>
+            <span className="footer-dot">·</span>
+            <span className="tech-badge"><GitHubIcon size={13} /> GitHub</span>
           </span>
         </footer>
       </main>
@@ -1535,9 +1540,13 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
               <p>
                 <span>Settlement</span>
                 <strong>
-                  {mode === "demo"
-                    ? "Simulated receipt"
-                    : "PayPal Sandbox Payouts"}
+                  {mode === "demo" ? (
+                    "Simulated receipt"
+                  ) : (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <PayPalIcon size={13} /> PayPal Sandbox Payouts
+                    </span>
+                  )}
                 </strong>
               </p>
             </div>
@@ -1609,7 +1618,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
             <section>
               <span>01</span>
               <div>
-                <h3>Define and fund</h3>
+                <h3><PayPalIcon size={18} /> Define and fund</h3>
                 <p>
                   Create measurable criteria and a USD reward. PayPal Sandbox
                   Checkout captures the funding; the server verifies every
@@ -1620,7 +1629,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
             <section>
               <span>02</span>
               <div>
-                <h3>Evaluate and challenge</h3>
+                <h3><GitHubIcon size={18} /> Evaluate and challenge</h3>
                 <p>
                   GitHub evidence is tied to a commit and trusted CI checks.
                   Your custom model evaluates the evidence, then challenges its verdict. Every criterion needs
@@ -1631,7 +1640,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
             <section>
               <span>03</span>
               <div>
-                <h3>Apply the release policy</h3>
+                <h3><ShieldCheck size={18} /> Apply the release policy</h3>
                 <p>
                   Approved work with a score ≥ 90/100 and reward ≤ $50 releases automatically by
                   default. Other approved work requires a maintainer click.
@@ -1642,7 +1651,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
             <section>
               <span>04</span>
               <div>
-                <h3>Keep an honest ledger</h3>
+                <h3><AgGridIcon size={18} /> Keep an honest ledger</h3>
                 <p>
                   AG Grid and Studio connect audits, dashboards, policy decisions, and
                   receipts. Demo presets and payout-permission fallbacks are
