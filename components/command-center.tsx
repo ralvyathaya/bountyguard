@@ -35,6 +35,7 @@ import {
   Workflow,
   X,
   Zap,
+  User,
 } from "lucide-react";
 import type { GridApi } from "ag-grid-community";
 import type { AppMode, LedgerRow, SessionRole } from "@/lib/types";
@@ -683,11 +684,16 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
               <GitHubIcon size={16} />
             </a>
             <button
-              className="avatar"
+              className={authenticated ? "session-badge active" : "session-badge"}
+              title={
+                authenticated
+                  ? `Signed in as ${role === "judge" ? "Judge" : "Maintainer"}. Click to sign out.`
+                  : "Maintainer sign in"
+              }
               aria-label={
                 authenticated
-                  ? `Sign out ${role ?? "session"}`
-                  : "Sign in"
+                  ? `Signed in as ${role === "judge" ? "Judge" : "Maintainer"}. Click to sign out.`
+                  : "Maintainer sign in"
               }
               onClick={() => {
                 if (authenticated)
@@ -709,7 +715,8 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
                 else { setLoginRole("maintainer"); openModal({ kind: "login" }); }
               }}
             >
-              {authenticated ? role === "judge" ? "J" : "M" : "BG"}
+              <User size={13} />
+              <span>{authenticated ? (role === "judge" ? "Judge" : "Maintainer") : "Maintainer"}</span>
             </button>
           </div>
         </div>
