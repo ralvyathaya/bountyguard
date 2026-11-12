@@ -94,7 +94,7 @@ const customComponents: Pick<GuardDefinition, "id" | "label" | "comp">[] = [
     { id: "settlement-proof", label: "Settlement Proof", comp: SettlementProof },
 ];
 const customDefinitions = customComponents.map<GuardDefinition>(definition => ({ ...definition, defaultSize: { width: 560, height: 420 }, minSize: { width: 300, height: 240 }, dataMapping: { records: { type: "fieldset", supportedRoles: ["category"], required: true } }, form: params => params.createDefaults({ supportsTriggerCrossFilter: true, dataMappingItems: [{ key: "records", label: "Bounty identity" }] }), defaultState: { dataMapping: { records: [{ id: "bounties.id" }] } } }));
-const configuredWidgets = createWidgets<GuardRegistry>({ additionalTypes: customDefinitions, menu: [{ label: "BountyGuard evidence", widgetIds: ["decision-path", "policy-what-if", "settlement-proof"] }, { label: "Financial analytics", widgetIds: ["value", "bar-chart-grouped", "column-chart-grouped", "donut-chart", "grid"] }] });
+const configuredWidgets = createWidgets<GuardRegistry>({ additionalTypes: customDefinitions, menu: [{ label: "Garda evidence", widgetIds: ["decision-path", "policy-what-if", "settlement-proof"] }, { label: "Financial analytics", widgetIds: ["value", "bar-chart-grouped", "column-chart-grouped", "donut-chart", "grid"] }] });
 export const guardWidgets = { ...configuredWidgets, widgets: configuredWidgets.widgets.filter(widget => (STUDIO_WIDGET_TYPES as readonly string[]).includes(widget.id)) };
 type Preset = typeof STUDIO_PRESETS[number];
 export function presetWidget(preset: Preset, title: string): NonNullable<StudioReport["pages"][number]["widgets"]>[string] {

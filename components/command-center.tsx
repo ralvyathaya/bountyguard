@@ -647,11 +647,11 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar-inner">
-          <a href="/" className="wordmark" aria-label="BountyGuard home">
+          <a href="/" className="wordmark" aria-label="Garda home">
             <span className="brand-mark">
-              <ShieldCheck size={23} strokeWidth={1.8} />
+              <PayPalIcon size={21} variant="light" />
             </span>
-            BountyGuard
+            Garda
           </a>
           <span className="nav-divider" />
           <span className="workspace-label">
@@ -670,7 +670,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
           <div className="topbar-right">
             {!authenticated && <button className="button compact judge-access" onClick={() => { setLoginRole("judge"); openModal({ kind: "login" }); }}>Judge access</button>}
             <span className="sandbox-label">
-              <PayPalIcon size={14} variant="light" />
+              <ShieldCheck size={13} />
               Sandbox only
             </span>
             <a
@@ -1132,7 +1132,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
         <footer className="page-footer">
           <span>
             <Globe2 size={14} />
-            Built for builders, wherever they build.
+            Garda · Built for builders, wherever they build.
           </span>
           <span className="footer-tech-stack">
             <span className="tech-badge"><PayPalIcon size={13} /> PayPal Sandbox</span>
@@ -1661,7 +1661,7 @@ export function CommandCenter({ studioLicenseKey }: { studioLicenseKey?: string 
             </section>
           </div>
           <p className="small muted">
-            Evidence comes from pasted text or a public GitHub PR snapshot. Contributor code is never executed by BountyGuard. Funding is a ledger reservation against a sandbox merchant capture.
+            Evidence comes from pasted text or a public GitHub PR snapshot. Contributor code is never executed by Garda. Funding is a ledger reservation against a sandbox merchant capture.
           </p>
         </Dialog>
       )}

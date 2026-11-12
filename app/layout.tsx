@@ -2,9 +2,15 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BountyGuard — Work verified. Rewards released.",
+  title: "Garda — Work verified. Rewards released.",
   description:
     "An agentic bounty command center. Verify deliverables against acceptance criteria and release PayPal Sandbox rewards with a complete audit trail.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "32x32" },
+    ],
+  },
 };
 export default function RootLayout({
   children,
@@ -18,7 +24,7 @@ export default function RootLayout({
         {children}
         <noscript>
           <p className="noscript">
-            BountyGuard uses JavaScript for its interactive ledger. Enable
+            Garda uses JavaScript for its interactive ledger. Enable
             JavaScript to run judge scenarios. Connected payments require
             maintainer access.
           </p>
